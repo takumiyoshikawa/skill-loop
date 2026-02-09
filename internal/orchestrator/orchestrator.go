@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yoshikawatakumi/skill-loop/internal/config"
-	"github.com/yoshikawatakumi/skill-loop/internal/executor"
+	"github.com/takumiyoshikawa/skill-loop/internal/config"
+	"github.com/takumiyoshikawa/skill-loop/internal/executor"
 )
 
 const DefaultMaxIterations = 100

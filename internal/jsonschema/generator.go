@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/invopop/jsonschema"
-	"github.com/yoshikawatakumi/skill-loop/internal/config"
+	"github.com/takumiyoshikawa/skill-loop/internal/config"
 )
 
 // Generate creates a JSON Schema from the Config type for editor autocomplete and validation.
@@ -17,7 +17,7 @@ func Generate() ([]byte, error) {
 
 	s := r.Reflect(&config.Config{})
 
-	s.ID = "https://raw.githubusercontent.com/yoshikawatakumi/skill-loop/main/schema.json"
+	s.ID = "https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/main/schema.json"
 	s.Title = "skill-loop"
 	s.Description = "Schema for skill-loop YAML configuration files (skill-loop.yml)"
 

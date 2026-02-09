@@ -1,0 +1,44 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: skill-loop
+    main: ./cmd/skill-loop/main.go
+    binary: skill-loop
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/takumiyoshikawa/skill-loop/internal/version.Version={{.Version}}
+      - -X github.com/takumiyoshikawa/skill-loop/internal/version.Commit={{.Commit}}
+      - -X github.com/takumiyoshikawa/skill-loop/internal/version.Date={{.Date}}
+
+brews:
+  - repository:
+      owner: takumiyoshikawa
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/takumiyoshikawa/skill-loop"
+    description: "An agentic skill orchestrator powered by Claude Code"
+    license: "MIT"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^style:"
+      - "^refactor:"

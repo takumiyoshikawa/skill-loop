@@ -1,4 +1,4 @@
-module github.com/yoshikawatakumi/skill-loop
+module github.com/takumiyoshikawa/skill-loop
 
 go 1.25.7
 
