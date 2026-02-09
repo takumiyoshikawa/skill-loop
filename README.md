@@ -24,6 +24,14 @@ Chain multiple Claude Code skills together in a loop-based workflow. Define skil
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install takumiyoshikawa/tap/skill-loop
+```
+
+### Go install
+
 ```bash
 go install github.com/takumiyoshikawa/skill-loop/cmd/skill-loop@latest
 ```
