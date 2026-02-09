@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/yoshikawatakumi/skill-loop/internal/config"
-	"github.com/yoshikawatakumi/skill-loop/internal/orchestrator"
+	"github.com/takumiyoshikawa/skill-loop/internal/config"
+	"github.com/takumiyoshikawa/skill-loop/internal/orchestrator"
 )
 
 const defaultConfigFile = "skill-loop.yml"

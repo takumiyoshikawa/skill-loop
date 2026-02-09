@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/yoshikawatakumi/skill-loop/internal/jsonschema"
+	"github.com/takumiyoshikawa/skill-loop/internal/jsonschema"
 )
 
 func NewSchemaCmd() *cobra.Command {
@@ -21,7 +21,7 @@ of skill-loop.yml configuration files.
 The generated schema can be used with yaml-language-server by adding a comment
 at the top of your skill-loop.yml file:
 
-  # yaml-language-server: $schema=https://raw.githubusercontent.com/yoshikawatakumi/skill-loop/main/schema.json`,
+  # yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/main/schema.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			schemaBytes, err := jsonschema.Generate()
 			if err != nil {

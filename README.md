@@ -25,7 +25,7 @@ Chain multiple Claude Code skills together in a loop-based workflow. Define skil
 ## Installation
 
 ```bash
-go install github.com/yoshikawatakumi/skill-loop/cmd/skill-loop@latest
+go install github.com/takumiyoshikawa/skill-loop/cmd/skill-loop@latest
 ```
 
 Requires [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) to be available on your PATH.

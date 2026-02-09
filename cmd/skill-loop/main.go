@@ -1,6 +1,6 @@
 package main
 
-import "github.com/yoshikawatakumi/skill-loop/cmd/skill-loop/commands"
+import "github.com/takumiyoshikawa/skill-loop/cmd/skill-loop/commands"
 
 func main() {
 	commands.Execute()
