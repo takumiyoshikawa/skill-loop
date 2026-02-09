@@ -113,9 +113,9 @@ func TestRunLoopBack(t *testing.T) {
 	mock := &mockExecutor{
 		calls: []mockCall{
 			{result: &executor.SkillResult{Summary: "done impl"}},
-			{result: &executor.SkillResult{Summary: "needs fix"}},       // no match → impl
+			{result: &executor.SkillResult{Summary: "needs fix"}}, // no match → impl
 			{result: &executor.SkillResult{Summary: "re-impl"}},
-			{result: &executor.SkillResult{Summary: "<REVIEW_OK>"}},     // match → <DONE>
+			{result: &executor.SkillResult{Summary: "<REVIEW_OK>"}}, // match → <DONE>
 		},
 	}
 

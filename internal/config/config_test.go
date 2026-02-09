@@ -22,7 +22,7 @@ skills:
         skill: "<DONE>"
       - skill: impl
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -76,7 +76,7 @@ func TestLoadMissingEntrypoint(t *testing.T) {
     next:
       - skill: "<DONE>"
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestLoadNoSkills(t *testing.T) {
 
 	content := []byte(`entrypoint: review
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -112,7 +112,7 @@ skills:
     next:
       - skill: "<DONE>"
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -132,7 +132,7 @@ skills:
     next:
       - skill: nonexistent
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -153,7 +153,7 @@ skills:
       - when: "<OK>"
         skill: ""
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -173,7 +173,7 @@ skills:
     next:
       - skill: "<DONE>"
 `)
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestLoadInvalidYAML(t *testing.T) {
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
 	content := []byte("this is not valid: yaml: [")
-	if err := os.WriteFile(cfgFile, content, 0o644); err != nil {
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 

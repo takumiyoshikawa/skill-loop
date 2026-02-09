@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gosec
+    - gocritic
+    - misspell
+    - nilerr
+  settings:
+    gosec:
+      excludes:
+        - G204  # subprocess launched with variable (executor is designed to do this)
+        - G304  # file inclusion via variable (config loader needs this)
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-same-issues: 0

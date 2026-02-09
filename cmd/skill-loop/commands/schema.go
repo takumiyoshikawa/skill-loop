@@ -30,11 +30,11 @@ at the top of your skill-loop.yml file:
 
 			if outputFile != "" {
 				if dir := filepath.Dir(outputFile); dir != "." {
-					if err := os.MkdirAll(dir, 0o755); err != nil {
+					if err := os.MkdirAll(dir, 0o750); err != nil {
 						return fmt.Errorf("creating directory %s: %w", dir, err)
 					}
 				}
-				if err := os.WriteFile(outputFile, schemaBytes, 0644); err != nil {
+				if err := os.WriteFile(outputFile, schemaBytes, 0o600); err != nil {
 					return fmt.Errorf("writing schema: %w", err)
 				}
 				fmt.Printf("JSON Schema written to %s\n", outputFile)
