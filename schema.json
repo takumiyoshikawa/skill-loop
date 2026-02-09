@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/yoshikawatakumi/skill-loop/main/schema.json",
+  "$ref": "#/$defs/Config",
+  "$defs": {
+    "Config": {
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "description": "Name of the skill to start the loop with. Must exist in the skills map."
+        },
+        "max_iterations": {
+          "type": "integer",
+          "description": "Maximum number of loop iterations before stopping. Defaults to 100 if omitted."
+        },
+        "skills": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Skill"
+          },
+          "type": "object",
+          "description": "Map of skill names to their definitions."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "entrypoint",
+        "skills"
+      ]
+    },
+    "Route": {
+      "properties": {
+        "when": {
+          "type": "string",
+          "description": "Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."
+        },
+        "skill": {
+          "type": "string",
+          "description": "Target skill name to route to or \u003cDONE\u003e to terminate the loop."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "skill"
+      ]
+    },
+    "Skill": {
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Claude model ID to use for this skill (e.g. claude-sonnet-4-5-20250929)."
+        },
+        "next": {
+          "items": {
+            "$ref": "#/$defs/Route"
+          },
+          "type": "array",
+          "description": "Routing rules evaluated top-to-bottom. The first matching route is used."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "next"
+      ]
+    }
+  },
+  "title": "skill-loop",
+  "description": "Schema for skill-loop YAML configuration files (skill-loop.yml)"
+}

@@ -1,5 +1,5 @@
 entrypoint: 1-impl
-max_iteration: 4
+max_iterations: 4
 
 skills:
   1-impl:

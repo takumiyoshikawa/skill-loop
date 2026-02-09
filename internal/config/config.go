@@ -8,19 +8,19 @@ import (
 )
 
 type Route struct {
-	When  string `yaml:"when,omitempty"`
-	Skill string `yaml:"skill"`
+	When  string `yaml:"when,omitempty" jsonschema:"description=Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."`
+	Skill string `yaml:"skill" jsonschema:"required,description=Target skill name to route to or <DONE> to terminate the loop."`
 }
 
 type Skill struct {
-	Model string  `yaml:"model,omitempty"`
-	Next  []Route `yaml:"next"`
+	Model string  `yaml:"model,omitempty" jsonschema:"description=Claude model ID to use for this skill (e.g. claude-sonnet-4-5-20250929)."`
+	Next  []Route `yaml:"next" jsonschema:"required,description=Routing rules evaluated top-to-bottom. The first matching route is used."`
 }
 
 type Config struct {
-	Entrypoint    string           `yaml:"entrypoint"`
-	MaxIterations int              `yaml:"max_iterations,omitempty"`
-	Skills        map[string]Skill `yaml:"skills"`
+	Entrypoint    string           `yaml:"entrypoint" jsonschema:"required,description=Name of the skill to start the loop with. Must exist in the skills map."`
+	MaxIterations int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
+	Skills        map[string]Skill `yaml:"skills" jsonschema:"required,description=Map of skill names to their definitions."`
 }
 
 func Load(path string) (*Config, error) {

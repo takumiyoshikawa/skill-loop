@@ -18,6 +18,7 @@ where each skill can delegate to the next based on its output.`,
 	}
 
 	cmd.AddCommand(NewRunCmd())
+	cmd.AddCommand(NewSchemaCmd())
 
 	return cmd
 }
