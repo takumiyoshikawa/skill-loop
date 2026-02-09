@@ -1,0 +1,15 @@
+entrypoint: 1-impl
+max_iteration: 4
+
+skills:
+  1-impl:
+    model: claude-haiku-4-5
+    next:
+      - skill: 2-review
+
+  2-review:
+    model: claude-haiku-4-5
+    next:
+      - when: "<REVIEW_OK>"
+        skill: "<DONE>"
+      - skill: 1-impl
