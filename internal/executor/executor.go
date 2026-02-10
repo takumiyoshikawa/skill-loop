@@ -1,31 +1,28 @@
 package executor
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/takumiyoshikawa/skill-loop/internal/config"
 )
 
-const jsonInstruction = `
-
-After completing the task, output ONLY the following JSON on the last line:
-{"summary": "<brief summary of what you did>"}`
-
 type SkillResult struct {
-	Summary string `json:"summary"`
+	Summary string
 }
 
-func ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string) (*SkillResult, error) {
+func ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route) (*SkillResult, error) {
 	if agent == "" {
 		agent = "claude"
 	}
 
-	fullPrompt := "Run the skill: " + name + "\n"
+	fullPrompt := "/" + name + "\n"
+	fullPrompt += "\nDo not output your reasoning in stdout.\n"
 	if prevSummary != "" {
-		fullPrompt += "\nPrevious skill summary: " + prevSummary + "\n"
+		fullPrompt += "\nPrevious skill output:\n" + prevSummary + "\n"
 	}
-	fullPrompt += jsonInstruction
+	fullPrompt += buildRouteInstruction(routes)
 
 	binary, args, err := buildCommand(agent, model, extraArgs, fullPrompt)
 	if err != nil {
@@ -42,6 +39,34 @@ func ExecuteSkill(name string, agent string, model string, extraArgs []string, p
 	}
 
 	return parseOutput(output)
+}
+
+func buildRouteInstruction(routes []config.Route) string {
+	// Check if any route has routing criteria defined
+	hasCriteria := false
+	for _, r := range routes {
+		if r.When != "" || r.Criteria != "" {
+			hasCriteria = true
+			break
+		}
+	}
+
+	if !hasCriteria {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\nStart your output with the appropriate status marker on the first line, then provide your detailed response:")
+
+	for _, r := range routes {
+		if r.When != "" {
+			sb.WriteString(fmt.Sprintf("\n- %q: %s", r.When, r.Criteria))
+		} else {
+			sb.WriteString(fmt.Sprintf("\n- Otherwise: %s", r.Criteria))
+		}
+	}
+
+	return sb.String()
 }
 
 func buildCommand(agent string, model string, extraArgs []string, prompt string) (string, []string, error) {
@@ -77,26 +102,9 @@ func parseOutput(output []byte) (*SkillResult, error) {
 }
 
 func extractResult(text string) (*SkillResult, error) {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-
-	// Try lines from the end to find a valid JSON object
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		// Strip markdown code fences if present
-		line = strings.TrimPrefix(line, "```json")
-		line = strings.TrimPrefix(line, "```")
-		line = strings.TrimSuffix(line, "```")
-		line = strings.TrimSpace(line)
-
-		if !strings.HasPrefix(line, "{") {
-			continue
-		}
-
-		var result SkillResult
-		if err := json.Unmarshal([]byte(line), &result); err == nil {
-			return &result, nil
-		}
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return nil, fmt.Errorf("no output from agent")
 	}
-
-	return nil, fmt.Errorf("no valid JSON result found in assistant output")
+	return &SkillResult{Summary: trimmed}, nil
 }

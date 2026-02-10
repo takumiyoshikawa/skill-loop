@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
 
 default_entrypoint: 1-impl
-max_iterations: 4
+max_iterations: 5
 
 skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-haiku-4-5
+      model: claude-sonnet-4-5
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -21,5 +21,6 @@ skills:
         - "--full-auto"
     next:
       - when: "<REVIEW_OK>"
+        criteria: "If the review skill indicates that the implementation is complete."
         skill: "<DONE>"
       - skill: 1-impl

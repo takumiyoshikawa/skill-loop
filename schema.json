@@ -55,6 +55,10 @@
           "type": "string",
           "description": "Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."
         },
+        "criteria": {
+          "type": "string",
+          "description": "Judgment criteria for when this route should be chosen. Included in the agent prompt to guide decision-making."
+        },
         "skill": {
           "type": "string",
           "description": "Target skill name to route to or \u003cDONE\u003e to terminate the loop."

@@ -12,14 +12,14 @@ const DefaultMaxIterations = 100
 
 // SkillExecutor abstracts skill execution for testability.
 type SkillExecutor interface {
-	ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string) (*executor.SkillResult, error)
+	ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route) (*executor.SkillResult, error)
 }
 
 // defaultExecutor delegates to the real executor package.
 type defaultExecutor struct{}
 
-func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string) (*executor.SkillResult, error) {
-	return executor.ExecuteSkill(name, agent, model, extraArgs, prevSummary)
+func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route) (*executor.SkillResult, error) {
+	return executor.ExecuteSkill(name, agent, model, extraArgs, prevSummary, routes)
 }
 
 func Run(cfg *config.Config, maxIterations int, prompt string, entrypoint string) error {
@@ -58,12 +58,12 @@ func RunWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 			runtime = "claude"
 		}
 
-		result, err := exec.ExecuteSkill(currentSkill, runtime, skill.Agent.Model, skill.Agent.Args, prevSummary)
+		result, err := exec.ExecuteSkill(currentSkill, runtime, skill.Agent.Model, skill.Agent.Args, prevSummary, skill.Next)
 		if err != nil {
 			return fmt.Errorf("skill %q failed: %w", currentSkill, err)
 		}
 
-		fmt.Printf("    Summary: %s\n", result.Summary)
+		fmt.Println(result.Summary)
 
 		nextSkill := resolveNext(skill.Next, result.Summary)
 

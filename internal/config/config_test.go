@@ -17,12 +17,19 @@ skills:
       runtime: claude
       model: sonnet
     next:
-      - skill: review
+      - when: "<CONTINUE>"
+        criteria: "まだ作業が必要な場合"
+        skill: impl
+      - when: "<IMPL_DONE>"
+        criteria: "実装が完了した場合"
+        skill: review
   review:
     next:
       - when: "<REVIEW_OK>"
+        criteria: "品質基準を満たしている場合"
         skill: "<DONE>"
-      - skill: impl
+      - criteria: "改善が必要な場合"
+        skill: impl
 `)
 	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -50,22 +57,25 @@ skills:
 	}
 
 	implRoutes := cfg.Skills["impl"].Next
-	if len(implRoutes) != 1 {
-		t.Fatalf("len(impl.Next) = %d, want 1", len(implRoutes))
+	if len(implRoutes) != 2 {
+		t.Fatalf("len(impl.Next) = %d, want 2", len(implRoutes))
 	}
-	if implRoutes[0].Skill != "review" {
-		t.Errorf("impl.Next[0].Skill = %q, want %q", implRoutes[0].Skill, "review")
+	if implRoutes[0].When != "<CONTINUE>" || implRoutes[0].Criteria != "まだ作業が必要な場合" || implRoutes[0].Skill != "impl" {
+		t.Errorf("impl.Next[0] = %+v", implRoutes[0])
+	}
+	if implRoutes[1].When != "<IMPL_DONE>" || implRoutes[1].Criteria != "実装が完了した場合" || implRoutes[1].Skill != "review" {
+		t.Errorf("impl.Next[1] = %+v", implRoutes[1])
 	}
 
 	reviewRoutes := cfg.Skills["review"].Next
 	if len(reviewRoutes) != 2 {
 		t.Fatalf("len(review.Next) = %d, want 2", len(reviewRoutes))
 	}
-	if reviewRoutes[0].When != "<REVIEW_OK>" || reviewRoutes[0].Skill != "<DONE>" {
-		t.Errorf("review.Next[0] = {%q, %q}, want {%q, %q}", reviewRoutes[0].When, reviewRoutes[0].Skill, "<REVIEW_OK>", "<DONE>")
+	if reviewRoutes[0].When != "<REVIEW_OK>" || reviewRoutes[0].Criteria != "品質基準を満たしている場合" || reviewRoutes[0].Skill != "<DONE>" {
+		t.Errorf("review.Next[0] = %+v", reviewRoutes[0])
 	}
-	if reviewRoutes[1].When != "" || reviewRoutes[1].Skill != "impl" {
-		t.Errorf("review.Next[1] = {%q, %q}, want {%q, %q}", reviewRoutes[1].When, reviewRoutes[1].Skill, "", "impl")
+	if reviewRoutes[1].When != "" || reviewRoutes[1].Criteria != "改善が必要な場合" || reviewRoutes[1].Skill != "impl" {
+		t.Errorf("review.Next[1] = %+v", reviewRoutes[1])
 	}
 }
 
