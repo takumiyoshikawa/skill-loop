@@ -21,6 +21,6 @@ skills:
         - "--full-auto"
     next:
       - when: "<REVIEW_OK>"
-        criteria: "コード品質が基準を満たしている場合"
+        criteria: "If the review skill indicates that the implementation is complete."
         skill: "<DONE>"
       - skill: 1-impl
