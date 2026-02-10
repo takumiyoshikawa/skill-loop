@@ -16,11 +16,6 @@ type SkillResult struct {
 	Summary string `json:"summary"`
 }
 
-// claudeResponse represents the --output-format json output from Claude Code CLI.
-type claudeResponse struct {
-	Result string `json:"result"`
-}
-
 func ExecuteSkill(name string, agent string, model string, prevSummary string) (*SkillResult, error) {
 	if agent == "" {
 		agent = "claude"
@@ -46,13 +41,13 @@ func ExecuteSkill(name string, agent string, model string, prevSummary string) (
 		return nil, fmt.Errorf("%s command failed: %w", agent, err)
 	}
 
-	return parseOutput(agent, output)
+	return parseOutput(output)
 }
 
 func buildCommand(agent string, model string, prompt string) (string, []string, error) {
 	switch agent {
 	case "claude":
-		args := []string{"-p", prompt, "--output-format", "json"}
+		args := []string{"-p", prompt}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
@@ -74,25 +69,8 @@ func buildCommand(agent string, model string, prompt string) (string, []string, 
 	}
 }
 
-func parseOutput(agent string, output []byte) (*SkillResult, error) {
-	if agent == "claude" {
-		return parseClaudeOutput(output)
-	}
-
+func parseOutput(output []byte) (*SkillResult, error) {
 	return extractResult(string(output))
-}
-
-func parseClaudeOutput(output []byte) (*SkillResult, error) {
-	var resp claudeResponse
-	if err := json.Unmarshal(output, &resp); err != nil {
-		return nil, fmt.Errorf("failed to parse claude output: %w", err)
-	}
-
-	if resp.Result == "" {
-		return nil, fmt.Errorf("empty result from claude")
-	}
-
-	return extractResult(resp.Result)
 }
 
 func extractResult(text string) (*SkillResult, error) {
