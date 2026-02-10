@@ -8,8 +8,9 @@ import (
 )
 
 type Route struct {
-	When  string `yaml:"when,omitempty" jsonschema:"description=Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."`
-	Skill string `yaml:"skill" jsonschema:"required,description=Target skill name to route to or <DONE> to terminate the loop."`
+	When     string `yaml:"when,omitempty" jsonschema:"description=Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."`
+	Criteria string `yaml:"criteria,omitempty" jsonschema:"description=Judgment criteria for when this route should be chosen. Included in the agent prompt to guide decision-making."`
+	Skill    string `yaml:"skill" jsonschema:"required,description=Target skill name to route to or <DONE> to terminate the loop."`
 }
 
 type Agent struct {

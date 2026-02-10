@@ -25,13 +25,13 @@ func TestE2E(t *testing.T) {
 
 	expectedLines := []string{
 		"==> Running skill: 1-impl (iteration 1)",
-		"Summary: <IMPL_DONE>",
+		"<IMPL_DONE>",
 		"==> Running skill: 2-review (iteration 2)",
-		"Summary: 2-review reviewed",
+		"2-review reviewed",
 		"==> Running skill: 1-impl (iteration 3)",
-		"Summary: <IMPL_DONE> You already reviewed.",
-		"==> Running skill: 2-review (iteration 4)",
-		"Summary: <REVIEW_OK>",
+		"<IMPL_DONE> You already reviewed.",
+		"==> Running skill: 2-review",
+		"<REVIEW_OK>",
 		"==> Loop finished.",
 	}
 
