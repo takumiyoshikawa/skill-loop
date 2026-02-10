@@ -22,11 +22,11 @@ func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, 
 	return executor.ExecuteSkill(name, agent, model, prevSummary)
 }
 
-func Run(cfg *config.Config, maxIterations int, prompt string) error {
-	return RunWith(cfg, maxIterations, prompt, &defaultExecutor{})
+func Run(cfg *config.Config, maxIterations int, prompt string, entrypoint string) error {
+	return RunWith(cfg, maxIterations, prompt, entrypoint, &defaultExecutor{})
 }
 
-func RunWith(cfg *config.Config, maxIterations int, prompt string, exec SkillExecutor) error {
+func RunWith(cfg *config.Config, maxIterations int, prompt string, entrypoint string, exec SkillExecutor) error {
 	if maxIterations <= 0 {
 		maxIterations = cfg.MaxIterations
 	}
@@ -34,7 +34,15 @@ func RunWith(cfg *config.Config, maxIterations int, prompt string, exec SkillExe
 		maxIterations = DefaultMaxIterations
 	}
 
-	currentSkill := cfg.Entrypoint
+	if entrypoint == "" {
+		entrypoint = cfg.DefaultEntrypoint
+	}
+
+	if err := cfg.ValidateEntrypoint(entrypoint); err != nil {
+		return err
+	}
+
+	currentSkill := entrypoint
 	prevSummary := prompt
 
 	for i := 0; i < maxIterations; i++ {

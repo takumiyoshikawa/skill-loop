@@ -29,7 +29,7 @@ func (m *mockExecutor) ExecuteSkill(name string, agent string, model string, pre
 
 func TestRunSingleSkillDone(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "review",
+		DefaultEntrypoint: "review",
 		Skills: map[string]config.Skill{
 			"review": {
 				Next: []config.Route{
@@ -45,7 +45,7 @@ func TestRunSingleSkillDone(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 10, "", mock)
+	err := RunWith(cfg, 10, "", "", mock)
 	if err != nil {
 		t.Fatalf("RunWith() error: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestRunSingleSkillDone(t *testing.T) {
 
 func TestRunSkillChain(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "impl",
+		DefaultEntrypoint: "impl",
 		Skills: map[string]config.Skill{
 			"impl": {
 				Next: []config.Route{{Skill: "review"}},
@@ -84,7 +84,7 @@ func TestRunSkillChain(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 10, "", mock)
+	err := RunWith(cfg, 10, "", "", mock)
 	if err != nil {
 		t.Fatalf("RunWith() error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestRunSkillChain(t *testing.T) {
 
 func TestRunLoopBack(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "impl",
+		DefaultEntrypoint: "impl",
 		Skills: map[string]config.Skill{
 			"impl": {
 				Next: []config.Route{{Skill: "review"}},
@@ -119,7 +119,7 @@ func TestRunLoopBack(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 10, "", mock)
+	err := RunWith(cfg, 10, "", "", mock)
 	if err != nil {
 		t.Fatalf("RunWith() error: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestRunLoopBack(t *testing.T) {
 
 func TestRunSkillExecutionError(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "review",
+		DefaultEntrypoint: "review",
 		Skills: map[string]config.Skill{
 			"review": {
 				Next: []config.Route{{Skill: "<DONE>"}},
@@ -145,7 +145,7 @@ func TestRunSkillExecutionError(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 10, "", mock)
+	err := RunWith(cfg, 10, "", "", mock)
 	if err == nil {
 		t.Error("RunWith() should return error when executor fails")
 	}
@@ -153,7 +153,7 @@ func TestRunSkillExecutionError(t *testing.T) {
 
 func TestRunMaxIterationsReached(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "impl",
+		DefaultEntrypoint: "impl",
 		Skills: map[string]config.Skill{
 			"impl": {
 				Next: []config.Route{{Skill: "review"}},
@@ -172,7 +172,7 @@ func TestRunMaxIterationsReached(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 3, "", mock)
+	err := RunWith(cfg, 3, "", "", mock)
 	if err == nil {
 		t.Error("RunWith() should return error when max iterations reached")
 	}
@@ -180,7 +180,7 @@ func TestRunMaxIterationsReached(t *testing.T) {
 
 func TestRunDefaultMaxIterations(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "review",
+		DefaultEntrypoint: "review",
 		Skills: map[string]config.Skill{
 			"review": {
 				Next: []config.Route{{Skill: "<DONE>"}},
@@ -194,7 +194,7 @@ func TestRunDefaultMaxIterations(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 0, "", mock)
+	err := RunWith(cfg, 0, "", "", mock)
 	if err != nil {
 		t.Fatalf("RunWith() error: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestRunDefaultMaxIterations(t *testing.T) {
 
 func TestRunNoRoutes(t *testing.T) {
 	cfg := &config.Config{
-		Entrypoint: "review",
+		DefaultEntrypoint: "review",
 		Skills: map[string]config.Skill{
 			"review": {
 				Next: nil,
@@ -216,7 +216,7 @@ func TestRunNoRoutes(t *testing.T) {
 		},
 	}
 
-	err := RunWith(cfg, 10, "", mock)
+	err := RunWith(cfg, 10, "", "", mock)
 	if err != nil {
 		t.Fatalf("RunWith() error: %v", err)
 	}
@@ -244,5 +244,52 @@ func TestResolveNext(t *testing.T) {
 	got = resolveNext(nil, "anything")
 	if got != "<DONE>" {
 		t.Errorf("resolveNext(nil) = %q, want %q", got, "<DONE>")
+	}
+}
+
+func TestRunWithEntrypointOverride(t *testing.T) {
+	cfg := &config.Config{
+		DefaultEntrypoint: "impl",
+		Skills: map[string]config.Skill{
+			"impl": {
+				Next: []config.Route{{Skill: "<DONE>"}},
+			},
+			"review": {
+				Next: []config.Route{{Skill: "<DONE>"}},
+			},
+		},
+	}
+
+	mock := &mockExecutor{
+		calls: []mockCall{
+			{result: &executor.SkillResult{Summary: "review done"}},
+		},
+	}
+
+	err := RunWith(cfg, 10, "", "review", mock)
+	if err != nil {
+		t.Fatalf("RunWith() error: %v", err)
+	}
+
+	if mock.callIdx != 1 {
+		t.Errorf("expected 1 call, got %d", mock.callIdx)
+	}
+}
+
+func TestRunWithEntrypointOverrideUnknownSkill(t *testing.T) {
+	cfg := &config.Config{
+		DefaultEntrypoint: "impl",
+		Skills: map[string]config.Skill{
+			"impl": {
+				Next: []config.Route{{Skill: "<DONE>"}},
+			},
+		},
+	}
+
+	mock := &mockExecutor{}
+
+	err := RunWith(cfg, 10, "", "missing", mock)
+	if err == nil {
+		t.Error("RunWith() should return error when overridden entrypoint is unknown")
 	}
 }

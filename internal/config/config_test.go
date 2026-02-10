@@ -10,7 +10,7 @@ func TestLoadValidConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: impl
+	content := []byte(`default_entrypoint: impl
 skills:
   impl:
     agent:
@@ -33,8 +33,8 @@ skills:
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.Entrypoint != "impl" {
-		t.Errorf("Entrypoint = %q, want %q", cfg.Entrypoint, "impl")
+	if cfg.DefaultEntrypoint != "impl" {
+		t.Errorf("DefaultEntrypoint = %q, want %q", cfg.DefaultEntrypoint, "impl")
 	}
 
 	if len(cfg.Skills) != 2 {
@@ -84,7 +84,7 @@ func TestLoadMissingEntrypoint(t *testing.T) {
 
 	_, err := Load(cfgFile)
 	if err == nil {
-		t.Error("Load() should return error for missing entrypoint")
+		t.Error("Load() should return error for missing default_entrypoint")
 	}
 }
 
@@ -92,7 +92,7 @@ func TestLoadNoSkills(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: review
+	content := []byte(`default_entrypoint: review
 `)
 	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -108,7 +108,7 @@ func TestLoadEntrypointNotInSkills(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: missing
+	content := []byte(`default_entrypoint: missing
 skills:
   review:
     next:
@@ -120,7 +120,7 @@ skills:
 
 	_, err := Load(cfgFile)
 	if err == nil {
-		t.Error("Load() should return error when entrypoint not found in skills")
+		t.Error("Load() should return error when default_entrypoint not found in skills")
 	}
 }
 
@@ -128,7 +128,7 @@ func TestLoadRouteReferencesUnknownSkill(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: impl
+	content := []byte(`default_entrypoint: impl
 skills:
   impl:
     next:
@@ -148,7 +148,7 @@ func TestLoadRouteEmptySkillTarget(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: impl
+	content := []byte(`default_entrypoint: impl
 skills:
   impl:
     next:
@@ -169,7 +169,7 @@ func TestLoadDoneIsValidTarget(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
-	content := []byte(`entrypoint: impl
+	content := []byte(`default_entrypoint: impl
 skills:
   impl:
     next:
