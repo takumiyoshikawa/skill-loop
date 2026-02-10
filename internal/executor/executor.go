@@ -16,7 +16,7 @@ type SkillResult struct {
 	Summary string `json:"summary"`
 }
 
-func ExecuteSkill(name string, agent string, model string, prevSummary string) (*SkillResult, error) {
+func ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string) (*SkillResult, error) {
 	if agent == "" {
 		agent = "claude"
 	}
@@ -27,7 +27,7 @@ func ExecuteSkill(name string, agent string, model string, prevSummary string) (
 	}
 	fullPrompt += jsonInstruction
 
-	binary, args, err := buildCommand(agent, model, fullPrompt)
+	binary, args, err := buildCommand(agent, model, extraArgs, fullPrompt)
 	if err != nil {
 		return nil, err
 	}
@@ -44,25 +44,28 @@ func ExecuteSkill(name string, agent string, model string, prevSummary string) (
 	return parseOutput(output)
 }
 
-func buildCommand(agent string, model string, prompt string) (string, []string, error) {
+func buildCommand(agent string, model string, extraArgs []string, prompt string) (string, []string, error) {
 	switch agent {
 	case "claude":
 		args := []string{"-p", prompt}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
+		args = append(args, extraArgs...)
 		return "claude", args, nil
 	case "codex":
 		args := []string{"exec", prompt}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
+		args = append(args, extraArgs...)
 		return "codex", args, nil
 	case "opencode":
 		args := []string{"run", prompt}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
+		args = append(args, extraArgs...)
 		return "opencode", args, nil
 	default:
 		return "", nil, fmt.Errorf("unsupported agent %q", agent)

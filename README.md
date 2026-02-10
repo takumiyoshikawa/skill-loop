@@ -108,6 +108,9 @@ skill-loop run --prompt "Add a /logout endpoint"
 
 # Limit iterations
 skill-loop run --max-iterations 5
+
+# Start from a specific skill (skip earlier skills)
+skill-loop run --entrypoint 2-review
 ```
 
 ## Configuration
@@ -133,6 +136,21 @@ skill-loop run --max-iterations 5
 |---|---|---|---|
 | `runtime` | string | No | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude` |
 | `model` | string | No | Model to use for the selected agent (for example `claude-sonnet-4-5-20250929`) |
+| `args` | list | No | Additional CLI arguments passed to the agent (e.g. `["--dangerously-skip-permissions"]`) |
+
+`args` lets you pass arbitrary flags to the underlying agent CLI. This is useful for skipping permission prompts in automated workflows:
+
+```yaml
+skills:
+  1-impl:
+    agent:
+      runtime: claude
+      model: claude-sonnet-4-5-20250929
+      args:
+        - "--dangerously-skip-permissions"
+    next:
+      - skill: 2-review
+```
 
 ### Route fields
 

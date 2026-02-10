@@ -8,6 +8,8 @@ skills:
     agent:
       runtime: claude
       model: claude-haiku-4-5
+      args:
+        - "--dangerously-skip-permissions"
     next:
       - skill: 2-review
 
@@ -15,6 +17,8 @@ skills:
     agent:
       runtime: codex
       model: gpt-5.3-codex
+      args:
+        - "--full-auto"
     next:
       - when: "<REVIEW_OK>"
         skill: "<DONE>"
