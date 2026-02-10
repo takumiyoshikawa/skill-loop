@@ -2,6 +2,7 @@ package executor
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -95,5 +96,78 @@ func TestExtractResultEmptyInput(t *testing.T) {
 	_, err := extractResult("")
 	if err == nil {
 		t.Error("extractResult() should return error for empty input")
+	}
+}
+
+func TestBuildCommand(t *testing.T) {
+	tests := []struct {
+		name       string
+		agent      string
+		model      string
+		wantBinary string
+		wantArgs   []string
+		wantErr    bool
+	}{
+		{
+			name:       "claude",
+			agent:      "claude",
+			model:      "sonnet",
+			wantBinary: "claude",
+			wantArgs:   []string{"-p", "prompt", "--output-format", "json", "--model", "sonnet"},
+		},
+		{
+			name:       "codex",
+			agent:      "codex",
+			model:      "gpt-5",
+			wantBinary: "codex",
+			wantArgs:   []string{"exec", "prompt", "--model", "gpt-5"},
+		},
+		{
+			name:       "opencode",
+			agent:      "opencode",
+			model:      "x",
+			wantBinary: "opencode",
+			wantArgs:   []string{"run", "prompt", "--model", "x"},
+		},
+		{
+			name:    "invalid",
+			agent:   "unknown",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotBinary, gotArgs, err := buildCommand(tt.agent, tt.model, "prompt")
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("buildCommand() expected error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("buildCommand() error: %v", err)
+			}
+			if gotBinary != tt.wantBinary {
+				t.Fatalf("binary = %q, want %q", gotBinary, tt.wantBinary)
+			}
+			if !reflect.DeepEqual(gotArgs, tt.wantArgs) {
+				t.Fatalf("args = %#v, want %#v", gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestParseOutputForNonClaude(t *testing.T) {
+	output := []byte("some output\n{\"summary\": \"done <REVIEW_OK>\"}\n")
+
+	res, err := parseOutput("codex", output)
+	if err != nil {
+		t.Fatalf("parseOutput() error: %v", err)
+	}
+
+	if res.Summary != "done <REVIEW_OK>" {
+		t.Fatalf("Summary = %q, want %q", res.Summary, "done <REVIEW_OK>")
 	}
 }

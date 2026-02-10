@@ -3,6 +3,20 @@
   "$id": "https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/main/schema.json",
   "$ref": "#/$defs/Config",
   "$defs": {
+    "Agent": {
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "description": "Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude."
+        },
+        "model": {
+          "type": "string",
+          "description": "Model ID to use for this skill (agent-specific)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "Config": {
       "properties": {
         "entrypoint": {
@@ -47,9 +61,9 @@
     },
     "Skill": {
       "properties": {
-        "model": {
-          "type": "string",
-          "description": "Claude model ID to use for this skill (e.g. claude-sonnet-4-5-20250929)."
+        "agent": {
+          "$ref": "#/$defs/Agent",
+          "description": "Agent configuration for this skill. runtime defaults to claude when omitted."
         },
         "next": {
           "items": {

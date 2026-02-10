@@ -5,12 +5,16 @@ max_iterations: 4
 
 skills:
   1-impl:
-    model: claude-haiku-4-5
+    agent:
+      runtime: claude
+      model: claude-haiku-4-5
     next:
       - skill: 2-review
 
   2-review:
-    model: claude-haiku-4-5
+    agent:
+      runtime: codex
+      model: gpt-5-codex-mini
     next:
       - when: "<REVIEW_OK>"
         skill: "<DONE>"

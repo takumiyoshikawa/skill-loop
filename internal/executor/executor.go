@@ -21,28 +21,65 @@ type claudeResponse struct {
 	Result string `json:"result"`
 }
 
-func ExecuteSkill(name string, model string, prevSummary string) (*SkillResult, error) {
+func ExecuteSkill(name string, agent string, model string, prevSummary string) (*SkillResult, error) {
+	if agent == "" {
+		agent = "claude"
+	}
+
 	fullPrompt := "Run the skill: " + name + "\n"
 	if prevSummary != "" {
 		fullPrompt += "\nPrevious skill summary: " + prevSummary + "\n"
 	}
 	fullPrompt += jsonInstruction
 
-	args := []string{"-p", fullPrompt, "--output-format", "json"}
-	if model != "" {
-		args = append(args, "--model", model)
+	binary, args, err := buildCommand(agent, model, fullPrompt)
+	if err != nil {
+		return nil, err
 	}
 
-	cmd := exec.Command("claude", args...)
+	cmd := exec.Command(binary, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("claude command failed: %w\nstderr: %s", err, string(exitErr.Stderr))
+			return nil, fmt.Errorf("%s command failed: %w\nstderr: %s", agent, err, string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("claude command failed: %w", err)
+		return nil, fmt.Errorf("%s command failed: %w", agent, err)
 	}
 
-	return parseClaudeOutput(output)
+	return parseOutput(agent, output)
+}
+
+func buildCommand(agent string, model string, prompt string) (string, []string, error) {
+	switch agent {
+	case "claude":
+		args := []string{"-p", prompt, "--output-format", "json"}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		return "claude", args, nil
+	case "codex":
+		args := []string{"exec", prompt}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		return "codex", args, nil
+	case "opencode":
+		args := []string{"run", prompt}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		return "opencode", args, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported agent %q", agent)
+	}
+}
+
+func parseOutput(agent string, output []byte) (*SkillResult, error) {
+	if agent == "claude" {
+		return parseClaudeOutput(output)
+	}
+
+	return extractResult(string(output))
 }
 
 func parseClaudeOutput(output []byte) (*SkillResult, error) {

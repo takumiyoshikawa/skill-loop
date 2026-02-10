@@ -12,8 +12,13 @@ type Route struct {
 	Skill string `yaml:"skill" jsonschema:"required,description=Target skill name to route to or <DONE> to terminate the loop."`
 }
 
+type Agent struct {
+	Runtime string `yaml:"runtime,omitempty" jsonschema:"description=Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude." default:"claude"`
+	Model   string `yaml:"model,omitempty" jsonschema:"description=Model ID to use for this skill (agent-specific)."`
+}
+
 type Skill struct {
-	Model string  `yaml:"model,omitempty" jsonschema:"description=Claude model ID to use for this skill (e.g. claude-sonnet-4-5-20250929)."`
+	Agent Agent   `yaml:"agent,omitempty" jsonschema:"description=Agent configuration for this skill. runtime defaults to claude when omitted."`
 	Next  []Route `yaml:"next" jsonschema:"required,description=Routing rules evaluated top-to-bottom. The first matching route is used."`
 }
 
@@ -47,6 +52,14 @@ func Load(path string) (*Config, error) {
 	}
 
 	for name, skill := range cfg.Skills {
+		runtime := skill.Agent.Runtime
+		if runtime == "" {
+			runtime = "claude"
+		}
+		if runtime != "claude" && runtime != "codex" && runtime != "opencode" {
+			return nil, fmt.Errorf("skill %q: unsupported agent runtime %q (supported: claude, codex, opencode)", name, skill.Agent.Runtime)
+		}
+
 		for i, route := range skill.Next {
 			if route.Skill == "" {
 				return nil, fmt.Errorf("skill %q: route[%d] has empty skill target", name, i)

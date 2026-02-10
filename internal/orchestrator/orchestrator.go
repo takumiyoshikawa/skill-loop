@@ -12,14 +12,14 @@ const DefaultMaxIterations = 100
 
 // SkillExecutor abstracts skill execution for testability.
 type SkillExecutor interface {
-	ExecuteSkill(name string, model string, prevSummary string) (*executor.SkillResult, error)
+	ExecuteSkill(name string, agent string, model string, prevSummary string) (*executor.SkillResult, error)
 }
 
 // defaultExecutor delegates to the real executor package.
 type defaultExecutor struct{}
 
-func (d *defaultExecutor) ExecuteSkill(name string, model string, prevSummary string) (*executor.SkillResult, error) {
-	return executor.ExecuteSkill(name, model, prevSummary)
+func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, prevSummary string) (*executor.SkillResult, error) {
+	return executor.ExecuteSkill(name, agent, model, prevSummary)
 }
 
 func Run(cfg *config.Config, maxIterations int, prompt string) error {
@@ -45,7 +45,12 @@ func RunWith(cfg *config.Config, maxIterations int, prompt string, exec SkillExe
 
 		fmt.Printf("==> Running skill: %s (iteration %d)\n", currentSkill, i+1)
 
-		result, err := exec.ExecuteSkill(currentSkill, skill.Model, prevSummary)
+		runtime := skill.Agent.Runtime
+		if runtime == "" {
+			runtime = "claude"
+		}
+
+		result, err := exec.ExecuteSkill(currentSkill, runtime, skill.Agent.Model, prevSummary)
 		if err != nil {
 			return fmt.Errorf("skill %q failed: %w", currentSkill, err)
 		}

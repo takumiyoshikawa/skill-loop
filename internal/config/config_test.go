@@ -13,7 +13,9 @@ func TestLoadValidConfig(t *testing.T) {
 	content := []byte(`entrypoint: impl
 skills:
   impl:
-    model: sonnet
+    agent:
+      runtime: claude
+      model: sonnet
     next:
       - skill: review
   review:
@@ -39,12 +41,12 @@ skills:
 		t.Errorf("len(Skills) = %d, want 2", len(cfg.Skills))
 	}
 
-	if cfg.Skills["impl"].Model != "sonnet" {
-		t.Errorf("Skills[impl].Model = %q, want %q", cfg.Skills["impl"].Model, "sonnet")
+	if cfg.Skills["impl"].Agent.Model != "sonnet" {
+		t.Errorf("Skills[impl].Agent.Model = %q, want %q", cfg.Skills["impl"].Agent.Model, "sonnet")
 	}
 
-	if cfg.Skills["review"].Model != "" {
-		t.Errorf("Skills[review].Model = %q, want empty", cfg.Skills["review"].Model)
+	if cfg.Skills["review"].Agent.Model != "" {
+		t.Errorf("Skills[review].Agent.Model = %q, want empty", cfg.Skills["review"].Agent.Model)
 	}
 
 	implRoutes := cfg.Skills["impl"].Next
@@ -206,5 +208,48 @@ func TestLoadInvalidYAML(t *testing.T) {
 	_, err := Load(cfgFile)
 	if err == nil {
 		t.Error("Load() should return error for invalid YAML")
+	}
+}
+
+func TestLoadInvalidAgent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`entrypoint: impl
+skills:
+  impl:
+    agent:
+      runtime: unknown
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err := Load(cfgFile)
+	if err == nil {
+		t.Error("Load() should return error for unsupported agent")
+	}
+}
+
+func TestLoadLegacyAgentString(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`entrypoint: impl
+skills:
+  impl:
+    agent: codex
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err := Load(cfgFile)
+	if err == nil {
+		t.Error("Load() should return error for legacy string agent format")
 	}
 }
