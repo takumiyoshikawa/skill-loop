@@ -18,7 +18,7 @@ Chain multiple coding-agent skills together in a loop-based workflow. Define ski
 ```
 
 1. skill-loop reads a YAML config that defines skills and routing rules
-2. Starting from the `entrypoint`, it invokes the configured agent (`claude`, `codex`, or `opencode`) with each skill
+2. Starting from `--entrypoint` (if provided) or `default_entrypoint`, it invokes the configured agent (`claude`, `codex`, or `opencode`) with each skill
 3. Each skill produces a summary; routing rules match substrings in the summary to decide the next skill
 4. The loop continues until a route resolves to `<DONE>` or `max_iterations` is reached
 
@@ -46,7 +46,7 @@ Requires at least one supported agent CLI to be available on your PATH:
 Create a `skill-loop.yml` in your project:
 
 ```yaml
-entrypoint: 1-impl
+default_entrypoint: 1-impl
 max_iterations: 10
 
 skills:
@@ -92,6 +92,7 @@ skill-loop run [config.yml] [flags]
 | `[config.yml]` | Path to config file (default: `skill-loop.yml`) |
 | `--prompt` | Initial prompt passed to the first skill |
 | `--max-iterations` | Override the config's `max_iterations` value |
+| `--entrypoint` | Start from a specific skill (overrides config `default_entrypoint`) |
 
 ### Examples
 
@@ -115,7 +116,7 @@ skill-loop run --max-iterations 5
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `entrypoint` | string | Yes | Name of the skill to start with |
+| `default_entrypoint` | string | Yes | Default skill name to start with (unless overridden via `--entrypoint`) |
 | `max_iterations` | int | No | Maximum loop iterations (default: 100) |
 | `skills` | map | Yes | Skill definitions |
 

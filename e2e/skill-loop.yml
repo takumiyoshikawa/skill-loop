@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
 
-entrypoint: 1-impl
+default_entrypoint: 1-impl
 max_iterations: 4
 
 skills:
@@ -14,7 +14,7 @@ skills:
   2-review:
     agent:
       runtime: codex
-      model: gpt-5-codex-mini
+      model: gpt-5.3-codex
     next:
       - when: "<REVIEW_OK>"
         skill: "<DONE>"

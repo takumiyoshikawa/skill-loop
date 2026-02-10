@@ -15,6 +15,7 @@ const defaultConfigFile = "skill-loop.yml"
 func NewRunCmd() *cobra.Command {
 	var maxIterations int
 	var prompt string
+	var entrypoint string
 
 	cmd := &cobra.Command{
 		Use:   "run [config.yml]",
@@ -33,12 +34,13 @@ func NewRunCmd() *cobra.Command {
 				return err
 			}
 
-			return orchestrator.Run(cfg, maxIterations, prompt)
+			return orchestrator.Run(cfg, maxIterations, prompt, entrypoint)
 		},
 	}
 
 	cmd.Flags().IntVar(&maxIterations, "max-iterations", 0, "Maximum number of loop iterations (overrides config; default 100)")
-	cmd.Flags().StringVar(&prompt, "prompt", "", "Initial prompt passed to the first skill")
+	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Initial prompt passed to the first skill")
+	cmd.Flags().StringVarP(&entrypoint, "entrypoint", "e", "", "Skill to start from (overrides config default_entrypoint)")
 
 	return cmd
 }

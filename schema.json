@@ -19,9 +19,9 @@
     },
     "Config": {
       "properties": {
-        "entrypoint": {
+        "default_entrypoint": {
           "type": "string",
-          "description": "Name of the skill to start the loop with. Must exist in the skills map."
+          "description": "Default skill to start the loop with. Must exist in the skills map."
         },
         "max_iterations": {
           "type": "integer",
@@ -38,7 +38,7 @@
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "entrypoint",
+        "default_entrypoint",
         "skills"
       ]
     },

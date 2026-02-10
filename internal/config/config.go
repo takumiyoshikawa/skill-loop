@@ -23,9 +23,9 @@ type Skill struct {
 }
 
 type Config struct {
-	Entrypoint    string           `yaml:"entrypoint" jsonschema:"required,description=Name of the skill to start the loop with. Must exist in the skills map."`
-	MaxIterations int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
-	Skills        map[string]Skill `yaml:"skills" jsonschema:"required,description=Map of skill names to their definitions."`
+	DefaultEntrypoint string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
+	MaxIterations     int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
+	Skills            map[string]Skill `yaml:"skills" jsonschema:"required,description=Map of skill names to their definitions."`
 }
 
 func Load(path string) (*Config, error) {
@@ -39,16 +39,16 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
-	if cfg.Entrypoint == "" {
-		return nil, fmt.Errorf("entrypoint is required")
+	if cfg.DefaultEntrypoint == "" {
+		return nil, fmt.Errorf("default_entrypoint is required")
 	}
 
 	if len(cfg.Skills) == 0 {
 		return nil, fmt.Errorf("at least one skill is required")
 	}
 
-	if _, ok := cfg.Skills[cfg.Entrypoint]; !ok {
-		return nil, fmt.Errorf("entrypoint %q not found in skills", cfg.Entrypoint)
+	if err := cfg.ValidateEntrypoint(cfg.DefaultEntrypoint); err != nil {
+		return nil, err
 	}
 
 	for name, skill := range cfg.Skills {
@@ -73,4 +73,16 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) ValidateEntrypoint(entrypoint string) error {
+	if entrypoint == "" {
+		return fmt.Errorf("entrypoint is required")
+	}
+
+	if _, ok := c.Skills[entrypoint]; !ok {
+		return fmt.Errorf("entrypoint %q not found in skills", entrypoint)
+	}
+
+	return nil
 }
