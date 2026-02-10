@@ -1,44 +1,9 @@
 package executor
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 )
-
-func TestParseClaudeOutput(t *testing.T) {
-	resp := claudeResponse{
-		Result: `I reviewed the code and found some issues.
-{"summary": "Found 3 bugs <REVIEW_NG>"}`,
-	}
-	data, _ := json.Marshal(resp)
-
-	result, err := parseClaudeOutput(data)
-	if err != nil {
-		t.Fatalf("parseClaudeOutput() error: %v", err)
-	}
-
-	if result.Summary != "Found 3 bugs <REVIEW_NG>" {
-		t.Errorf("Summary = %q, want %q", result.Summary, "Found 3 bugs <REVIEW_NG>")
-	}
-}
-
-func TestParseClaudeOutputEmptyResult(t *testing.T) {
-	resp := claudeResponse{Result: ""}
-	data, _ := json.Marshal(resp)
-
-	_, err := parseClaudeOutput(data)
-	if err == nil {
-		t.Error("parseClaudeOutput() should return error for empty result")
-	}
-}
-
-func TestParseClaudeOutputInvalidJSON(t *testing.T) {
-	_, err := parseClaudeOutput([]byte("not json"))
-	if err == nil {
-		t.Error("parseClaudeOutput() should return error for invalid JSON")
-	}
-}
 
 func TestExtractResultLastLine(t *testing.T) {
 	text := `Here is my analysis of the code.
@@ -113,7 +78,7 @@ func TestBuildCommand(t *testing.T) {
 			agent:      "claude",
 			model:      "sonnet",
 			wantBinary: "claude",
-			wantArgs:   []string{"-p", "prompt", "--output-format", "json", "--model", "sonnet"},
+			wantArgs:   []string{"-p", "prompt", "--model", "sonnet"},
 		},
 		{
 			name:       "codex",
@@ -159,10 +124,10 @@ func TestBuildCommand(t *testing.T) {
 	}
 }
 
-func TestParseOutputForNonClaude(t *testing.T) {
+func TestParseOutput(t *testing.T) {
 	output := []byte("some output\n{\"summary\": \"done <REVIEW_OK>\"}\n")
 
-	res, err := parseOutput("codex", output)
+	res, err := parseOutput(output)
 	if err != nil {
 		t.Fatalf("parseOutput() error: %v", err)
 	}
