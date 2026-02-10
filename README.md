@@ -1,8 +1,8 @@
 # skill-loop
 
-An agentic skill orchestrator powered by [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+An agentic skill orchestrator for coding-agent CLIs.
 
-Chain multiple Claude Code skills together in a loop-based workflow. Define skills, routing conditions, and iteration limits in a simple YAML config — skill-loop handles the rest.
+Chain multiple coding-agent skills together in a loop-based workflow. Define skills, routing conditions, and iteration limits in a simple YAML config — skill-loop handles the rest.
 
 ## How it works
 
@@ -18,7 +18,7 @@ Chain multiple Claude Code skills together in a loop-based workflow. Define skil
 ```
 
 1. skill-loop reads a YAML config that defines skills and routing rules
-2. Starting from the `entrypoint`, it invokes Claude Code with each skill
+2. Starting from the `entrypoint`, it invokes the configured agent (`claude`, `codex`, or `opencode`) with each skill
 3. Each skill produces a summary; routing rules match substrings in the summary to decide the next skill
 4. The loop continues until a route resolves to `<DONE>` or `max_iterations` is reached
 
@@ -36,7 +36,10 @@ brew install takumiyoshikawa/tap/skill-loop
 go install github.com/takumiyoshikawa/skill-loop/cmd/skill-loop@latest
 ```
 
-Requires [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`) to be available on your PATH.
+Requires at least one supported agent CLI to be available on your PATH:
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
+- [Codex CLI](https://github.com/openai/codex) (`codex`)
+- [OpenCode CLI](https://github.com/sst/opencode) (`opencode`)
 
 ## Quick start
 
@@ -48,12 +51,16 @@ max_iterations: 10
 
 skills:
   1-impl:
-    model: claude-sonnet-4-5-20250929
+    agent:
+      runtime: claude
+      model: claude-sonnet-4-5-20250929
     next:
       - skill: 2-review
 
   2-review:
-    model: claude-sonnet-4-5-20250929
+    agent:
+      runtime: codex
+      model: claude-sonnet-4-5-20250929
     next:
       - when: "<REVIEW_OK>"
         skill: "<DONE>"
@@ -116,8 +123,15 @@ skill-loop run --max-iterations 5
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `model` | string | No | Claude model to use (e.g., `claude-sonnet-4-5-20250929`) |
+| `agent` | object | No | Agent settings for the skill |
 | `next` | list | Yes | Routing rules evaluated in order |
+
+### Agent fields
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `runtime` | string | No | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude` |
+| `model` | string | No | Model to use for the selected agent (for example `claude-sonnet-4-5-20250929`) |
 
 ### Route fields
 
@@ -134,7 +148,7 @@ Routes are evaluated top-to-bottom. The first matching route is selected. A rout
 cmd/skill-loop/          CLI entrypoint (Cobra)
 internal/
   config/                YAML config loading & validation
-  executor/              Claude Code CLI invocation & output parsing
+  executor/              Agent CLI invocation & output parsing
   orchestrator/          Loop control, routing, iteration management
 ```
 
