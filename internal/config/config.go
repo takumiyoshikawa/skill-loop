@@ -13,8 +13,9 @@ type Route struct {
 }
 
 type Agent struct {
-	Runtime string `yaml:"runtime,omitempty" jsonschema:"description=Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude." default:"claude"`
-	Model   string `yaml:"model,omitempty" jsonschema:"description=Model ID to use for this skill (agent-specific)."`
+	Runtime string   `yaml:"runtime,omitempty" jsonschema:"description=Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude." default:"claude"`
+	Model   string   `yaml:"model,omitempty" jsonschema:"description=Model ID to use for this skill (agent-specific)."`
+	Args    []string `yaml:"args,omitempty" jsonschema:"description=Additional CLI arguments to pass to the agent (e.g. --dangerously-skip-permissions for claude)."`
 }
 
 type Skill struct {

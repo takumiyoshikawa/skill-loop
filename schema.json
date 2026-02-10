@@ -12,6 +12,13 @@
         "model": {
           "type": "string",
           "description": "Model ID to use for this skill (agent-specific)."
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional CLI arguments to pass to the agent (e.g. --dangerously-skip-permissions for claude)."
         }
       },
       "additionalProperties": false,

@@ -69,6 +69,7 @@ func TestBuildCommand(t *testing.T) {
 		name       string
 		agent      string
 		model      string
+		extraArgs  []string
 		wantBinary string
 		wantArgs   []string
 		wantErr    bool
@@ -81,11 +82,27 @@ func TestBuildCommand(t *testing.T) {
 			wantArgs:   []string{"-p", "prompt", "--model", "sonnet"},
 		},
 		{
+			name:       "claude with extra args",
+			agent:      "claude",
+			model:      "sonnet",
+			extraArgs:  []string{"--dangerously-skip-permissions"},
+			wantBinary: "claude",
+			wantArgs:   []string{"-p", "prompt", "--model", "sonnet", "--dangerously-skip-permissions"},
+		},
+		{
 			name:       "codex",
 			agent:      "codex",
 			model:      "gpt-5",
 			wantBinary: "codex",
 			wantArgs:   []string{"exec", "prompt", "--model", "gpt-5"},
+		},
+		{
+			name:       "codex with extra args",
+			agent:      "codex",
+			model:      "gpt-5",
+			extraArgs:  []string{"--full-auto"},
+			wantBinary: "codex",
+			wantArgs:   []string{"exec", "prompt", "--model", "gpt-5", "--full-auto"},
 		},
 		{
 			name:       "opencode",
@@ -103,7 +120,7 @@ func TestBuildCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotBinary, gotArgs, err := buildCommand(tt.agent, tt.model, "prompt")
+			gotBinary, gotArgs, err := buildCommand(tt.agent, tt.model, tt.extraArgs, "prompt")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("buildCommand() expected error")
