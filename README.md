@@ -54,6 +54,8 @@ skills:
     agent:
       runtime: claude
       model: claude-sonnet-4-5-20250929
+      args:
+        - "--dangerously-skip-permissions"
     next:
       - skill: 2-review
 
@@ -61,8 +63,11 @@ skills:
     agent:
       runtime: codex
       model: claude-sonnet-4-5-20250929
+      args:
+        - "--full-auto"
     next:
       - when: "<REVIEW_OK>"
+        criteria: "If the review says implementation quality is sufficient."
         skill: "<DONE>"
       - skill: 1-impl
 ```
@@ -157,6 +162,7 @@ skills:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `when` | string | No | Substring to match in the skill's summary. If omitted, the route always matches (acts as a default) |
+| `criteria` | string | No | Judgment criteria describing when this route should be chosen (included in the agent prompt as guidance) |
 | `skill` | string | Yes | Next skill to run, or `<DONE>` to terminate the loop |
 
 Routes are evaluated top-to-bottom. The first matching route is selected. A route without `when` acts as a fallback.
