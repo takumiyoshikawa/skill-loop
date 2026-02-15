@@ -213,6 +213,12 @@ func DeleteByID(repoRoot string, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return fmt.Errorf("session id is required")
 	}
+	meta, err := LoadByID(repoRoot, id)
+	if err == nil && meta.TmuxSession != "" {
+		if err := killTMuxSession(meta.TmuxSession); err != nil && !errors.Is(err, exec.ErrNotFound) {
+			return fmt.Errorf("kill tmux session %s: %w", meta.TmuxSession, err)
+		}
+	}
 	sessionDir := filepath.Join(SessionsRoot(repoRoot), id)
 	if err := os.RemoveAll(sessionDir); err != nil {
 		return fmt.Errorf("delete session directory %s: %w", sessionDir, err)
@@ -293,6 +299,11 @@ func Reconcile(meta *Metadata) error {
 	}
 
 	if hasExitCode {
+		cleanupErr := killTMuxSession(meta.TmuxSession)
+		if cleanupErr != nil && !errors.Is(cleanupErr, exec.ErrNotFound) {
+			return fmt.Errorf("cleanup tmux session %s: %w", meta.TmuxSession, cleanupErr)
+		}
+
 		now := time.Now().UTC()
 		if exitCode == 0 {
 			meta.Status = StatusDone
@@ -351,7 +362,7 @@ func HasTMuxSession(name string) (bool, error) {
 	}
 
 	if errors.Is(err, exec.ErrNotFound) {
-		return false, fmt.Errorf("tmux is required but not found on PATH")
+		return false, fmt.Errorf("tmux is required but not found on PATH: %w", exec.ErrNotFound)
 	}
 	return false, err
 }
