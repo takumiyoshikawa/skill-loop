@@ -168,6 +168,37 @@ func TestList(t *testing.T) {
 	})
 }
 
+func TestDeleteByID(t *testing.T) {
+	t.Run("deletes existing session directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		command := []string{"echo", "hello"}
+		meta, err := New(tempDir, tempDir, "skill-1", "claude", command, 10*time.Second, 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		sessionDir := filepath.Join(SessionsRoot(tempDir), meta.ID)
+		if _, err := os.Stat(sessionDir); err != nil {
+			t.Fatalf("expected session directory to exist: %v", err)
+		}
+
+		if err := DeleteByID(tempDir, meta.ID); err != nil {
+			t.Fatalf("DeleteByID() error: %v", err)
+		}
+
+		if _, err := os.Stat(sessionDir); !os.IsNotExist(err) {
+			t.Fatalf("expected session directory to be deleted, got err=%v", err)
+		}
+	})
+
+	t.Run("rejects empty session id", func(t *testing.T) {
+		tempDir := t.TempDir()
+		if err := DeleteByID(tempDir, ""); err == nil {
+			t.Fatal("DeleteByID() should return error for empty id")
+		}
+	})
+}
+
 func TestReadExitCode(t *testing.T) {
 	t.Run("returns false when file does not exist", func(t *testing.T) {
 		_, hasCode, err := ReadExitCode("/nonexistent/path")

@@ -21,6 +21,7 @@ func NewSessionsCmd() *cobra.Command {
 	cmd.AddCommand(newSessionsLsCmd())
 	cmd.AddCommand(newSessionsAttachCmd())
 	cmd.AddCommand(newSessionsStopCmd())
+	cmd.AddCommand(newSessionsPruneCmd())
 
 	return cmd
 }
@@ -104,6 +105,81 @@ func newSessionsStopCmd() *cobra.Command {
 	}
 }
 
+func newSessionsPruneCmd() *cobra.Command {
+	var dryRun bool
+	var all bool
+
+	cmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Delete recorded run sessions that are no longer active",
+		Long: `Delete local session metadata/log directories under .skill-loop/sessions.
+
+By default, only terminal sessions (done, failed, stopped) are removed.
+Use --all to also remove non-running non-terminal sessions (pending/idle).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, err := session.ResolveRepoRoot("")
+			if err != nil {
+				return err
+			}
+
+			metas, _, err := listRunSessions(repoRoot, 0, 0)
+			if err != nil {
+				return err
+			}
+
+			pruned := 0
+			skippedRunning := 0
+			skippedNonTerminal := 0
+			failures := 0
+
+			for _, meta := range metas {
+				if err := session.Reconcile(meta); err != nil {
+					fmt.Fprintf(os.Stderr, "warn: failed to reconcile %s: %v\n", meta.ID, err)
+				}
+
+				if meta.Status == session.StatusRunning {
+					skippedRunning++
+					continue
+				}
+				if !all && !isTerminalStatus(meta.Status) {
+					skippedNonTerminal++
+					continue
+				}
+
+				if dryRun {
+					fmt.Printf("would prune: %s (%s)\n", meta.ID, meta.Status)
+					pruned++
+					continue
+				}
+
+				if err := session.DeleteByID(repoRoot, meta.ID); err != nil {
+					failures++
+					fmt.Fprintf(os.Stderr, "warn: failed to prune %s: %v\n", meta.ID, err)
+					continue
+				}
+				fmt.Printf("pruned: %s (%s)\n", meta.ID, meta.Status)
+				pruned++
+			}
+
+			if dryRun {
+				fmt.Fprintf(os.Stderr, "Dry run complete. candidates=%d skipped_running=%d skipped_non_terminal=%d\n", pruned, skippedRunning, skippedNonTerminal)
+			} else {
+				fmt.Fprintf(os.Stderr, "Pruned=%d skipped_running=%d skipped_non_terminal=%d\n", pruned, skippedRunning, skippedNonTerminal)
+			}
+
+			if failures > 0 {
+				return fmt.Errorf("failed to prune %d session(s)", failures)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print sessions that would be pruned without deleting")
+	cmd.Flags().BoolVar(&all, "all", false, "Also prune non-running non-terminal sessions (pending/idle)")
+
+	return cmd
+}
+
 func loadRunSessionByID(id string) (*session.Metadata, error) {
 	repoRoot, err := session.ResolveRepoRoot("")
 	if err != nil {
@@ -146,4 +222,8 @@ func listRunSessions(repoRoot string, offset, limit int) ([]*session.Metadata, i
 	}
 
 	return runs[offset:end], total, nil
+}
+
+func isTerminalStatus(status session.Status) bool {
+	return status == session.StatusDone || status == session.StatusFailed || status == session.StatusStopped
 }

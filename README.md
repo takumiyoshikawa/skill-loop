@@ -196,6 +196,9 @@ Session root is resolved from `git rev-parse --show-toplevel` (fallback: current
 skill-loop sessions ls
 skill-loop sessions attach <session-id>
 skill-loop sessions stop <session-id>
+skill-loop sessions prune
+skill-loop sessions prune --dry-run
+skill-loop sessions prune --all
 ```
 
 ## Architecture

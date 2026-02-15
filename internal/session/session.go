@@ -205,6 +205,17 @@ func List(repoRoot string) ([]*Metadata, error) {
 	return metas, nil
 }
 
+func DeleteByID(repoRoot string, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("session id is required")
+	}
+	sessionDir := filepath.Join(SessionsRoot(repoRoot), id)
+	if err := os.RemoveAll(sessionDir); err != nil {
+		return fmt.Errorf("delete session directory %s: %w", sessionDir, err)
+	}
+	return nil
+}
+
 func Start(meta *Metadata) error {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		return fmt.Errorf("tmux is required but not found on PATH")
