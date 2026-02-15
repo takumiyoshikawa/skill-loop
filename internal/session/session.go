@@ -65,9 +65,13 @@ func ResolveRepoRoot(cwd string) (string, error) {
 
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	cmd.Dir = cwd
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return cwd, nil
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && strings.Contains(string(out), "not a git repository") {
+			return cwd, nil
+		}
+		return "", fmt.Errorf("resolve repo root: %w", err)
 	}
 
 	repoRoot := strings.TrimSpace(string(out))
@@ -101,7 +105,7 @@ func New(repoRoot string, workingDir string, skill string, runtime string, comma
 	}
 
 	sessionDir := filepath.Join(SessionsRoot(repoRoot), id)
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+	if err := os.MkdirAll(sessionDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create session directory: %w", err)
 	}
 
@@ -221,7 +225,7 @@ func Start(meta *Metadata) error {
 		return fmt.Errorf("tmux is required but not found on PATH")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(meta.StdoutPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(meta.StdoutPath), 0o750); err != nil {
 		return fmt.Errorf("ensure session directory: %w", err)
 	}
 
@@ -231,7 +235,7 @@ func Start(meta *Metadata) error {
 
 	_ = killTMuxSession(meta.TmuxSession)
 
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", meta.TmuxSession, "exec "+shellQuote(meta.ScriptPath))
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", meta.TmuxSession, "exec bash "+shellQuote(meta.ScriptPath))
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("start tmux session: %w", err)
 	}
@@ -393,7 +397,7 @@ func writeScript(meta *Metadata) error {
 		"",
 	}, "\n")
 
-	if err := os.WriteFile(meta.ScriptPath, []byte(content), 0o700); err != nil {
+	if err := os.WriteFile(meta.ScriptPath, []byte(content), 0o600); err != nil {
 		return fmt.Errorf("write run script: %w", err)
 	}
 	return nil

@@ -50,19 +50,25 @@ func newSessionsLsCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tSTATUS\tSTARTED\tLAST_OUTPUT")
+			if _, err := fmt.Fprintln(w, "ID\tSTATUS\tSTARTED\tLAST_OUTPUT"); err != nil {
+				return err
+			}
 			for _, meta := range metas {
 				_ = session.Reconcile(meta)
-				fmt.Fprintf(
+				if _, err := fmt.Fprintf(
 					w,
 					"%s\t%s\t%s\t%s\n",
 					meta.ID,
 					meta.Status,
 					meta.StartedAt.Format(time.RFC3339),
 					meta.LastOutputAt.Format(time.RFC3339),
-				)
+				); err != nil {
+					return err
+				}
 			}
-			_ = w.Flush()
+			if err := w.Flush(); err != nil {
+				return err
+			}
 
 			fmt.Fprintf(os.Stderr, "\nShowing %d-%d of %d sessions\n", offset+1, offset+len(metas), total)
 			return nil
