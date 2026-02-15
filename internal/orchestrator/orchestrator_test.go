@@ -18,7 +18,7 @@ type mockCall struct {
 	err    error
 }
 
-func (m *mockExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route) (*executor.SkillResult, error) {
+func (m *mockExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
 	if m.callIdx >= len(m.calls) {
 		return nil, fmt.Errorf("unexpected call #%d to ExecuteSkill(%q)", m.callIdx, name)
 	}

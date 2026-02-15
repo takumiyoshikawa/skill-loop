@@ -25,9 +25,11 @@ type Skill struct {
 }
 
 type Config struct {
-	DefaultEntrypoint string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
-	MaxIterations     int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
-	Skills            map[string]Skill `yaml:"skills" jsonschema:"required,description=Map of skill names to their definitions."`
+	DefaultEntrypoint  string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
+	MaxIterations      int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
+	IdleTimeoutSeconds int              `yaml:"idle_timeout_seconds,omitempty" jsonschema:"description=Idle timeout in seconds for each skill execution before restart. Defaults to 900 (15 minutes)." default:"900"`
+	MaxRestarts        *int             `yaml:"max_restarts,omitempty" jsonschema:"description=Maximum automatic restarts per skill execution when idle timeout is exceeded. Defaults to 2. Set 0 to disable automatic restarts." default:"2"`
+	Skills             map[string]Skill `yaml:"skills" jsonschema:"required,description=Map of skill names to their definitions."`
 }
 
 func Load(path string) (*Config, error) {
@@ -47,6 +49,17 @@ func Load(path string) (*Config, error) {
 
 	if len(cfg.Skills) == 0 {
 		return nil, fmt.Errorf("at least one skill is required")
+	}
+
+	if cfg.IdleTimeoutSeconds <= 0 {
+		cfg.IdleTimeoutSeconds = 900
+	}
+
+	if cfg.MaxRestarts == nil {
+		defaultMaxRestarts := 2
+		cfg.MaxRestarts = &defaultMaxRestarts
+	} else if *cfg.MaxRestarts < 0 {
+		return nil, fmt.Errorf("max_restarts must be >= 0")
 	}
 
 	if err := cfg.ValidateEntrypoint(cfg.DefaultEntrypoint); err != nil {
@@ -75,6 +88,13 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) EffectiveMaxRestarts() int {
+	if c.MaxRestarts == nil {
+		return 2
+	}
+	return *c.MaxRestarts
 }
 
 func (c *Config) ValidateEntrypoint(entrypoint string) error {

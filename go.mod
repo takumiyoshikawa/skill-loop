@@ -1,6 +1,6 @@
 module github.com/takumiyoshikawa/skill-loop
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/invopop/jsonschema v0.13.0
