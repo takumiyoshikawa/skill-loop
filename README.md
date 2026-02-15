@@ -37,9 +37,12 @@ go install github.com/takumiyoshikawa/skill-loop/cmd/skill-loop@latest
 ```
 
 Requires at least one supported agent CLI to be available on your PATH:
+
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
 - [Codex CLI](https://github.com/openai/codex) (`codex`)
 - [OpenCode CLI](https://github.com/sst/opencode) (`opencode`)
+
+And `tmux` must be installed (skill execution is tmux-backed).
 
 ## Quick start
 
@@ -62,7 +65,7 @@ skills:
   2-review:
     agent:
       runtime: codex
-      model: claude-sonnet-4-5-20250929
+      model: gpt-5.3-codex
       args:
         - "--full-auto"
     next:
@@ -86,24 +89,31 @@ Run:
 skill-loop run
 ```
 
+`skill-loop run` starts in background by default and prints a `run_id`.
+Use `skill-loop run --attach` to start detached and immediately attach to its tmux session.
+
 ## Usage
 
 ```bash
 skill-loop run [config.yml] [flags]
 ```
 
-| Argument / Flag | Description |
-|---|---|
-| `[config.yml]` | Path to config file (default: `skill-loop.yml`) |
-| `--prompt` | Initial prompt passed to the first skill |
-| `--max-iterations` | Override the config's `max_iterations` value |
-| `--entrypoint` | Start from a specific skill (overrides config `default_entrypoint`) |
+| Argument / Flag    | Description                                                         |
+| ------------------ | ------------------------------------------------------------------- |
+| `[config.yml]`     | Path to config file (default: `skill-loop.yml`)                     |
+| `--prompt`         | Initial prompt passed to the first skill                            |
+| `--max-iterations` | Override the config's `max_iterations` value                        |
+| `--entrypoint`     | Start from a specific skill (overrides config `default_entrypoint`) |
+| `--attach`         | Attach to the detached run session immediately                       |
 
 ### Examples
 
 ```bash
 # Use default config (skill-loop.yml)
 skill-loop run
+
+# Start detached and attach immediately
+skill-loop run --attach
 
 # Specify a config file
 skill-loop run my-workflow.yml
@@ -122,26 +132,28 @@ skill-loop run --entrypoint 2-review
 
 ### Top-level fields
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `default_entrypoint` | string | Yes | Default skill name to start with (unless overridden via `--entrypoint`) |
-| `max_iterations` | int | No | Maximum loop iterations (default: 100) |
-| `skills` | map | Yes | Skill definitions |
+| Field                  | Type   | Required | Description                                                              |
+| ---------------------- | ------ | -------- | ------------------------------------------------------------------------ |
+| `default_entrypoint`   | string | Yes      | Default skill name to start with (unless overridden via `--entrypoint`)  |
+| `max_iterations`       | int    | No       | Maximum loop iterations (default: 100)                                   |
+| `idle_timeout_seconds` | int    | No       | Idle timeout for each skill execution before auto-restart (default: 900) |
+| `max_restarts`         | int    | No       | Max auto-restarts per skill execution on idle timeout (default: 2, set `0` to disable) |
+| `skills`               | map    | Yes      | Skill definitions                                                        |
 
 ### Skill fields
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `agent` | object | No | Agent settings for the skill |
-| `next` | list | Yes | Routing rules evaluated in order |
+| Field   | Type   | Required | Description                      |
+| ------- | ------ | -------- | -------------------------------- |
+| `agent` | object | No       | Agent settings for the skill     |
+| `next`  | list   | Yes      | Routing rules evaluated in order |
 
 ### Agent fields
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `runtime` | string | No | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude` |
-| `model` | string | No | Model to use for the selected agent (for example `claude-sonnet-4-5-20250929`) |
-| `args` | list | No | Additional CLI arguments passed to the agent (e.g. `["--dangerously-skip-permissions"]`) |
+| Field     | Type   | Required | Description                                                                              |
+| --------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
+| `runtime` | string | No       | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude`               |
+| `model`   | string | No       | Model to use for the selected agent (for example `claude-sonnet-4-5-20250929`)           |
+| `args`    | list   | No       | Additional CLI arguments passed to the agent (e.g. `["--dangerously-skip-permissions"]`) |
 
 `args` lets you pass arbitrary flags to the underlying agent CLI. This is useful for skipping permission prompts in automated workflows:
 
@@ -159,13 +171,32 @@ skills:
 
 ### Route fields
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `when` | string | No | Substring to match in the skill's summary. If omitted, the route always matches (acts as a default) |
-| `criteria` | string | No | Judgment criteria describing when this route should be chosen (included in the agent prompt as guidance) |
-| `skill` | string | Yes | Next skill to run, or `<DONE>` to terminate the loop |
+| Field      | Type   | Required | Description                                                                                              |
+| ---------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
+| `when`     | string | No       | Substring to match in the skill's summary. If omitted, the route always matches (acts as a default)      |
+| `criteria` | string | No       | Judgment criteria describing when this route should be chosen (included in the agent prompt as guidance) |
+| `skill`    | string | Yes      | Next skill to run, or `<DONE>` to terminate the loop                                                     |
 
 Routes are evaluated top-to-bottom. The first matching route is selected. A route without `when` acts as a fallback.
+
+## Sessions
+
+Each detached run is recorded under:
+
+```
+<repo-root>/.skill-loop/sessions/<session-id>/
+  session.json
+  stdout.log
+  stderr.log
+```
+
+Session root is resolved from `git rev-parse --show-toplevel` (fallback: current directory).
+
+```bash
+skill-loop sessions ls
+skill-loop sessions attach <session-id>
+skill-loop sessions stop <session-id>
+```
 
 ## Architecture
 
@@ -175,6 +206,7 @@ internal/
   config/                YAML config loading & validation
   executor/              Agent CLI invocation & output parsing
   orchestrator/          Loop control, routing, iteration management
+  session/               tmux session lifecycle + session metadata/log storage
 ```
 
 ## License

@@ -113,6 +113,27 @@ func TestBuildRouteInstruction(t *testing.T) {
 				"\n- \"<NEEDS_TEST>\": テスト不足" +
 				"\n- Otherwise: その他の改善が必要",
 		},
+		{
+			name: "when without criteria",
+			routes: []config.Route{
+				{When: "<DONE>", Skill: "finish"},
+				{Skill: "continue"},
+			},
+			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
+				"\n- \"<DONE>\"",
+		},
+		{
+			name: "mixed routes with and without criteria",
+			routes: []config.Route{
+				{When: "<REVIEW_OK>", Criteria: "If review passed", Skill: "<DONE>"},
+				{When: "<NEEDS_FIX>", Skill: "1-impl"},
+				{Criteria: "Otherwise continue", Skill: "2-review"},
+			},
+			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
+				"\n- \"<REVIEW_OK>\": If review passed" +
+				"\n- \"<NEEDS_FIX>\"" +
+				"\n- Otherwise: Otherwise continue",
+		},
 	}
 
 	for _, tt := range tests {

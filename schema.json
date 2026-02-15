@@ -34,6 +34,14 @@
           "type": "integer",
           "description": "Maximum number of loop iterations before stopping. Defaults to 100 if omitted."
         },
+        "idle_timeout_seconds": {
+          "type": "integer",
+          "description": "Idle timeout in seconds for each skill execution before restart. Defaults to 900 (15 minutes)."
+        },
+        "max_restarts": {
+          "type": "integer",
+          "description": "Maximum automatic restarts per skill execution when idle timeout is exceeded. Defaults to 2. Set 0 to disable automatic restarts."
+        },
         "skills": {
           "additionalProperties": {
             "$ref": "#/$defs/Skill"

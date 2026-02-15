@@ -56,6 +56,14 @@ skills:
 		t.Errorf("Skills[review].Agent.Model = %q, want empty", cfg.Skills["review"].Agent.Model)
 	}
 
+	if cfg.IdleTimeoutSeconds != 900 {
+		t.Errorf("IdleTimeoutSeconds = %d, want 900", cfg.IdleTimeoutSeconds)
+	}
+
+	if cfg.EffectiveMaxRestarts() != 2 {
+		t.Errorf("EffectiveMaxRestarts = %d, want 2", cfg.EffectiveMaxRestarts())
+	}
+
 	implRoutes := cfg.Skills["impl"].Next
 	if len(implRoutes) != 2 {
 		t.Fatalf("len(impl.Next) = %d, want 2", len(implRoutes))
@@ -261,5 +269,51 @@ skills:
 	_, err := Load(cfgFile)
 	if err == nil {
 		t.Error("Load() should return error for legacy string agent format")
+	}
+}
+
+func TestLoadMaxRestartsZeroDisablesAutoRestart(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`default_entrypoint: impl
+max_restarts: 0
+skills:
+  impl:
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	cfg, err := Load(cfgFile)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.EffectiveMaxRestarts() != 0 {
+		t.Errorf("EffectiveMaxRestarts = %d, want 0", cfg.EffectiveMaxRestarts())
+	}
+}
+
+func TestLoadMaxRestartsNegativeIsRejected(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`default_entrypoint: impl
+max_restarts: -1
+skills:
+  impl:
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err := Load(cfgFile)
+	if err == nil {
+		t.Error("Load() should return error for negative max_restarts")
 	}
 }
