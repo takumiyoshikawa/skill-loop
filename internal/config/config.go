@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,7 @@ type Skill struct {
 }
 
 type Config struct {
+	Schedule           string           `yaml:"schedule,omitempty" jsonschema:"description=Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."`
 	DefaultEntrypoint  string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
 	MaxIterations      int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
 	IdleTimeoutSeconds int              `yaml:"idle_timeout_seconds,omitempty" jsonschema:"description=Idle timeout in seconds for each skill execution before restart. Defaults to 900 (15 minutes)." default:"900"`
@@ -45,6 +47,12 @@ func Load(path string) (*Config, error) {
 
 	if cfg.DefaultEntrypoint == "" {
 		return nil, fmt.Errorf("default_entrypoint is required")
+	}
+
+	if cfg.Schedule != "" {
+		if _, err := cron.ParseStandard(cfg.Schedule); err != nil {
+			return nil, fmt.Errorf("invalid schedule %q: %w", cfg.Schedule, err)
+		}
 	}
 
 	if len(cfg.Skills) == 0 {

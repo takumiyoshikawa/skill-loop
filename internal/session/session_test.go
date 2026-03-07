@@ -281,6 +281,46 @@ func TestReadExitCode(t *testing.T) {
 	})
 }
 
+func TestReconcileKeepsScheduledStatusWhenTmuxSessionExists(t *testing.T) {
+	binDir := t.TempDir()
+	tmuxPath := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(tmuxPath, []byte(`#!/bin/sh
+if [ "$1" = "has-session" ]; then
+  exit 0
+fi
+exit 0
+`), 0o755); err != nil {
+		t.Fatalf("failed to write fake tmux: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tempDir := t.TempDir()
+	now := time.Now().UTC()
+	nextRun := now.Add(time.Hour)
+	meta := &Metadata{
+		ID:           "scheduled-session",
+		RepoRoot:     tempDir,
+		ScriptPath:   filepath.Join(tempDir, "run.sh"),
+		ExitCodePath: filepath.Join(tempDir, "exit.code"),
+		StdoutPath:   filepath.Join(tempDir, "stdout.log"),
+		StderrPath:   filepath.Join(tempDir, "stderr.log"),
+		TmuxSession:  "skill-loop-scheduled-session",
+		Status:       StatusScheduled,
+		StartedAt:    now,
+		LastOutputAt: now,
+		NextRun:      &nextRun,
+		Schedule:     "0 9 * * *",
+	}
+
+	if err := Reconcile(meta); err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+
+	if meta.Status != StatusScheduled {
+		t.Fatalf("status = %s, want %s", meta.Status, StatusScheduled)
+	}
+}
+
 func TestShellQuote(t *testing.T) {
 	tests := []struct {
 		input string

@@ -55,7 +55,7 @@ func newSessionsLsCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			if _, err := fmt.Fprintln(w, "ID\tSTATUS\tSTARTED\tLAST_OUTPUT\tLAST_ERROR"); err != nil {
+			if _, err := fmt.Fprintln(w, "ID\tSTATUS\tDETAILS\tCONFIG\tSTARTED"); err != nil {
 				return err
 			}
 			for _, meta := range metas {
@@ -65,9 +65,9 @@ func newSessionsLsCmd() *cobra.Command {
 					"%s\t%s\t%s\t%s\t%s\n",
 					meta.ID,
 					meta.Status,
+					formatSessionDetail(meta),
+					sessionConfigName(meta),
 					meta.StartedAt.Format(time.RFC3339),
-					meta.LastOutputAt.Format(time.RFC3339),
-					displayLastError(meta.LastError),
 				); err != nil {
 					return err
 				}
@@ -306,13 +306,6 @@ func isTerminalStatus(status session.Status) bool {
 	return status == session.StatusDone || status == session.StatusFailed || status == session.StatusStopped
 }
 
-func displayLastError(s string) string {
-	if strings.TrimSpace(s) == "" {
-		return "-"
-	}
-	return s
-}
-
 func formatSessionDetails(meta *session.Metadata) string {
 	var b strings.Builder
 	sessionDir := filepath.Dir(meta.ScriptPath)
@@ -400,4 +393,46 @@ func tailLines(s string, n int) string {
 		result += "\n"
 	}
 	return result
+}
+
+func formatSessionDetail(meta *session.Metadata) string {
+	switch meta.Status {
+	case session.StatusScheduled:
+		if meta.NextRun == nil {
+			if meta.LastError != "" {
+				return "next: n/a error: " + meta.LastError
+			}
+			return "next: n/a"
+		}
+		detail := "next: " + meta.NextRun.Local().Format(time.DateTime)
+		if meta.LastError != "" {
+			detail += " error: " + meta.LastError
+		}
+		return detail
+	case session.StatusRunning:
+		if meta.Schedule != "" && meta.MaxIterations > 0 {
+			return fmt.Sprintf("iter: %d/%d", meta.CurrentIteration, meta.MaxIterations)
+		}
+		return "last_output: " + meta.LastOutputAt.Local().Format(time.DateTime)
+	case session.StatusFailed, session.StatusStopped:
+		if meta.LastError != "" {
+			return meta.LastError
+		}
+		if meta.EndedAt != nil {
+			return "ended: " + meta.EndedAt.Local().Format(time.DateTime)
+		}
+		return string(meta.Status)
+	default:
+		if meta.EndedAt != nil {
+			return "ended: " + meta.EndedAt.Local().Format(time.DateTime)
+		}
+		return meta.LastOutputAt.Local().Format(time.DateTime)
+	}
+}
+
+func sessionConfigName(meta *session.Metadata) string {
+	if meta.ConfigPath == "" {
+		return "-"
+	}
+	return filepath.Base(meta.ConfigPath)
 }
