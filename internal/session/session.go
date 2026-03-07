@@ -82,7 +82,16 @@ func ResolveRepoRoot(cwd string) (string, error) {
 }
 
 func SessionsRoot(repoRoot string) string {
-	return filepath.Join(repoRoot, ".skill-loop", "sessions")
+	_ = repoRoot
+	root, err := skillLoopDataRoot()
+	if err != nil {
+		// Fall back to the previous relative layout only if home resolution fails.
+		if repoRoot != "" {
+			return filepath.Join(repoRoot, ".skill-loop", "sessions")
+		}
+		return filepath.Join(".skill-loop", "sessions")
+	}
+	return filepath.Join(root, "sessions")
 }
 
 func New(repoRoot string, workingDir string, skill string, runtime string, command []string, idleTimeout time.Duration, maxRestarts int) (*Metadata, error) {
@@ -163,7 +172,14 @@ func Save(meta *Metadata) error {
 
 func LoadByID(repoRoot string, id string) (*Metadata, error) {
 	sessionFilePath := filepath.Join(SessionsRoot(repoRoot), id, "session.json")
-	return LoadFromPath(sessionFilePath)
+	meta, err := LoadFromPath(sessionFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if repoRoot != "" && filepath.Clean(meta.RepoRoot) != filepath.Clean(repoRoot) {
+		return nil, os.ErrNotExist
+	}
+	return meta, nil
 }
 
 func LoadFromPath(path string) (*Metadata, error) {
@@ -195,8 +211,11 @@ func List(repoRoot string) ([]*Metadata, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		meta, err := LoadByID(repoRoot, entry.Name())
+		meta, err := LoadFromPath(filepath.Join(root, entry.Name(), "session.json"))
 		if err != nil {
+			continue
+		}
+		if repoRoot != "" && filepath.Clean(meta.RepoRoot) != filepath.Clean(repoRoot) {
 			continue
 		}
 		metas = append(metas, meta)
@@ -465,6 +484,14 @@ func newID(now time.Time) (string, error) {
 		return "", fmt.Errorf("generate session id: %w", err)
 	}
 	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(buf)), nil
+}
+
+func skillLoopDataRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "share", "skill-loop"), nil
 }
 
 func shellQuote(s string) string {

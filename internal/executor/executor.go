@@ -85,13 +85,13 @@ func buildRouteInstruction(routes []config.Route) string {
 	for _, r := range routes {
 		if r.When != "" {
 			if r.Criteria != "" {
-				sb.WriteString(fmt.Sprintf("\n- %q: %s", r.When, r.Criteria))
+				fmt.Fprintf(&sb, "\n- %q: %s", r.When, r.Criteria)
 			} else {
-				sb.WriteString(fmt.Sprintf("\n- %q", r.When))
+				fmt.Fprintf(&sb, "\n- %q", r.When)
 			}
 		} else {
 			if r.Criteria != "" {
-				sb.WriteString(fmt.Sprintf("\n- Otherwise: %s", r.Criteria))
+				fmt.Fprintf(&sb, "\n- Otherwise: %s", r.Criteria)
 			}
 		}
 	}

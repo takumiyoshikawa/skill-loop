@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -19,6 +22,8 @@ func NewSessionsCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newSessionsLsCmd())
+	cmd.AddCommand(newSessionsShowCmd())
+	cmd.AddCommand(newSessionsLogsCmd())
 	cmd.AddCommand(newSessionsAttachCmd())
 	cmd.AddCommand(newSessionsStopCmd())
 	cmd.AddCommand(newSessionsPruneCmd())
@@ -50,18 +55,19 @@ func newSessionsLsCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			if _, err := fmt.Fprintln(w, "ID\tSTATUS\tSTARTED\tLAST_OUTPUT"); err != nil {
+			if _, err := fmt.Fprintln(w, "ID\tSTATUS\tSTARTED\tLAST_OUTPUT\tLAST_ERROR"); err != nil {
 				return err
 			}
 			for _, meta := range metas {
 				_ = session.Reconcile(meta)
 				if _, err := fmt.Fprintf(
 					w,
-					"%s\t%s\t%s\t%s\n",
+					"%s\t%s\t%s\t%s\t%s\n",
 					meta.ID,
 					meta.Status,
 					meta.StartedAt.Format(time.RFC3339),
 					meta.LastOutputAt.Format(time.RFC3339),
+					displayLastError(meta.LastError),
 				); err != nil {
 					return err
 				}
@@ -77,6 +83,72 @@ func newSessionsLsCmd() *cobra.Command {
 
 	cmd.Flags().IntVarP(&limit, "limit", "n", 20, "Maximum number of sessions to display")
 	cmd.Flags().IntVar(&offset, "offset", 0, "Number of sessions to skip")
+
+	return cmd
+}
+
+func newSessionsShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <session-id>",
+		Short: "Show session metadata including log paths and last error",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			meta, err := loadRunSessionByID(args[0])
+			if err != nil {
+				return err
+			}
+			if err := session.Reconcile(meta); err != nil {
+				return err
+			}
+
+			fmt.Print(formatSessionDetails(meta))
+			return nil
+		},
+	}
+}
+
+func newSessionsLogsCmd() *cobra.Command {
+	var stdout bool
+	var stderr bool
+	var tail int
+
+	cmd := &cobra.Command{
+		Use:   "logs <session-id>",
+		Short: "Print captured stdout/stderr logs for a session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			meta, err := loadRunSessionByID(args[0])
+			if err != nil {
+				return err
+			}
+			if err := session.Reconcile(meta); err != nil {
+				return err
+			}
+
+			stdout, stderr = resolveLogSelection(stdout, stderr)
+
+			if stdout {
+				if err := printLogSection(os.Stdout, "stdout", meta.StdoutPath, tail); err != nil {
+					return err
+				}
+			}
+			if stderr {
+				if stdout {
+					if _, err := fmt.Fprintln(os.Stdout); err != nil {
+						return err
+					}
+				}
+				if err := printLogSection(os.Stdout, "stderr", meta.StderrPath, tail); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&stdout, "stdout", false, "Print stdout log only")
+	cmd.Flags().BoolVar(&stderr, "stderr", false, "Print stderr log only")
+	cmd.Flags().IntVar(&tail, "tail", 0, "Print only the last N lines from each selected log")
 
 	return cmd
 }
@@ -232,4 +304,100 @@ func listRunSessions(repoRoot string, offset, limit int) ([]*session.Metadata, i
 
 func isTerminalStatus(status session.Status) bool {
 	return status == session.StatusDone || status == session.StatusFailed || status == session.StatusStopped
+}
+
+func displayLastError(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "-"
+	}
+	return s
+}
+
+func formatSessionDetails(meta *session.Metadata) string {
+	var b strings.Builder
+	sessionDir := filepath.Dir(meta.ScriptPath)
+
+	fmt.Fprintf(&b, "ID: %s\n", meta.ID)
+	fmt.Fprintf(&b, "Status: %s\n", meta.Status)
+	fmt.Fprintf(&b, "Started: %s\n", meta.StartedAt.Format(time.RFC3339))
+	fmt.Fprintf(&b, "Last output: %s\n", meta.LastOutputAt.Format(time.RFC3339))
+	if meta.EndedAt != nil {
+		fmt.Fprintf(&b, "Ended: %s\n", meta.EndedAt.Format(time.RFC3339))
+	}
+	fmt.Fprintf(&b, "Session: %s\n", sessionDir)
+	fmt.Fprintf(&b, "Stdout: %s\n", meta.StdoutPath)
+	fmt.Fprintf(&b, "Stderr: %s\n", meta.StderrPath)
+	fmt.Fprintf(&b, "Working dir: %s\n", meta.WorkingDir)
+	if meta.LastError != "" {
+		fmt.Fprintf(&b, "Last error: %s\n", meta.LastError)
+	}
+
+	return b.String()
+}
+
+func resolveLogSelection(stdout bool, stderr bool) (bool, bool) {
+	if !stdout && !stderr {
+		return true, true
+	}
+	return stdout, stderr
+}
+
+func printLogSection(w io.Writer, label string, path string, tail int) error {
+	content, err := readLogFile(path, tail)
+	if err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintf(w, "==> %s (%s)\n", label, path); err != nil {
+		return err
+	}
+	if content == "" {
+		_, err := fmt.Fprintln(w, "(empty)")
+		return err
+	}
+	if _, err := io.WriteString(w, content); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(content, "\n") {
+		_, err := fmt.Fprintln(w)
+		return err
+	}
+	return nil
+}
+
+func readLogFile(path string, tail int) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
+	}
+
+	content := string(data)
+	if tail > 0 {
+		content = tailLines(content, tail)
+	}
+	return content, nil
+}
+
+func tailLines(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+
+	trimmedTrailingNewline := strings.HasSuffix(s, "\n")
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return ""
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+
+	result := strings.Join(lines, "\n")
+	if trimmedTrailingNewline && result != "" {
+		result += "\n"
+	}
+	return result
 }

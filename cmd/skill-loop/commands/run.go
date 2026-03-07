@@ -54,6 +54,9 @@ Use --attach to attach to that tmux session immediately.`,
 
 			fmt.Printf("Started in background. run_id=%s\n", meta.ID)
 			fmt.Printf("Attach: skill-loop sessions attach %s\n", meta.ID)
+			fmt.Printf("Session: %s\n", filepath.Dir(meta.ScriptPath))
+			fmt.Printf("Stdout: %s\n", meta.StdoutPath)
+			fmt.Printf("Stderr: %s\n", meta.StderrPath)
 
 			if attach {
 				return session.Attach(meta)
