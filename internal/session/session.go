@@ -34,6 +34,8 @@ const (
 
 type Metadata struct {
 	ID                 string     `json:"id"`
+	WorkflowName       string     `json:"workflow_name,omitempty"`
+	StorageName        string     `json:"storage_name,omitempty"`
 	Skill              string     `json:"skill"`
 	Runtime            string     `json:"runtime"`
 	RepoRoot           string     `json:"repo_root"`
@@ -92,16 +94,15 @@ func SessionsRoot(repoRoot string) string {
 	_ = repoRoot
 	root, err := skillLoopDataRoot()
 	if err != nil {
-		// Fall back to the previous relative layout only if home resolution fails.
 		if repoRoot != "" {
-			return filepath.Join(repoRoot, ".skill-loop", "sessions")
+			return filepath.Join(repoRoot, ".skill-loop")
 		}
-		return filepath.Join(".skill-loop", "sessions")
+		return ".skill-loop"
 	}
-	return filepath.Join(root, "sessions")
+	return root
 }
 
-func New(repoRoot string, workingDir string, skill string, runtime string, command []string, idleTimeout time.Duration, maxRestarts int) (*Metadata, error) {
+func New(repoRoot string, workingDir string, workflowName string, skill string, runtime string, command []string, idleTimeout time.Duration, maxRestarts int) (*Metadata, error) {
 	if len(command) == 0 {
 		return nil, fmt.Errorf("command is required")
 	}
@@ -120,7 +121,13 @@ func New(repoRoot string, workingDir string, skill string, runtime string, comma
 		return nil, err
 	}
 
-	sessionDir := filepath.Join(SessionsRoot(repoRoot), id)
+	workflowName = sanitizePathSegment(workflowName)
+	storageName, err := newStorageName()
+	if err != nil {
+		return nil, err
+	}
+
+	sessionDir := filepath.Join(SessionsRoot(repoRoot), workflowName, storageName)
 	if err := os.MkdirAll(sessionDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create session directory: %w", err)
 	}
@@ -135,6 +142,8 @@ func New(repoRoot string, workingDir string, skill string, runtime string, comma
 
 	meta := &Metadata{
 		ID:                 id,
+		WorkflowName:       workflowName,
+		StorageName:        storageName,
 		Skill:              skill,
 		Runtime:            runtime,
 		RepoRoot:           repoRoot,
@@ -178,7 +187,10 @@ func Save(meta *Metadata) error {
 }
 
 func LoadByID(repoRoot string, id string) (*Metadata, error) {
-	sessionFilePath := filepath.Join(SessionsRoot(repoRoot), id, "session.json")
+	sessionFilePath, err := sessionFileByID(repoRoot, id)
+	if err != nil {
+		return nil, err
+	}
 	meta, err := LoadFromPath(sessionFilePath)
 	if err != nil {
 		return nil, err
@@ -205,7 +217,7 @@ func LoadFromPath(path string) (*Metadata, error) {
 
 func List(repoRoot string) ([]*Metadata, error) {
 	root := SessionsRoot(repoRoot)
-	entries, err := os.ReadDir(root)
+	entries, err := sessionFilePaths(root)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -214,11 +226,8 @@ func List(repoRoot string) ([]*Metadata, error) {
 	}
 
 	metas := make([]*Metadata, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		meta, err := LoadFromPath(filepath.Join(root, entry.Name(), "session.json"))
+	for _, sessionFile := range entries {
+		meta, err := LoadFromPath(sessionFile)
 		if err != nil {
 			continue
 		}
@@ -240,12 +249,15 @@ func DeleteByID(repoRoot string, id string) error {
 		return fmt.Errorf("session id is required")
 	}
 	meta, err := LoadByID(repoRoot, id)
-	if err == nil && meta.TmuxSession != "" {
+	if err != nil {
+		return err
+	}
+	if meta.TmuxSession != "" {
 		if err := killTMuxSession(meta.TmuxSession); err != nil && !errors.Is(err, exec.ErrNotFound) {
 			return fmt.Errorf("kill tmux session %s: %w", meta.TmuxSession, err)
 		}
 	}
-	sessionDir := filepath.Join(SessionsRoot(repoRoot), id)
+	sessionDir := filepath.Dir(meta.ScriptPath)
 	if err := os.RemoveAll(sessionDir); err != nil {
 		return fmt.Errorf("delete session directory %s: %w", sessionDir, err)
 	}
@@ -488,11 +500,26 @@ func updateLastOutputAt(meta *Metadata) {
 }
 
 func newID(now time.Time) (string, error) {
-	buf := make([]byte, 4)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("generate session id: %w", err)
+	random, err := randomHex(4)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(buf)), nil
+	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), random), nil
+}
+
+func newStorageName() (string, error) {
+	return randomHex(8)
+}
+
+func randomHex(size int) (string, error) {
+	buf := make([]byte, 4)
+	if size > 0 {
+		buf = make([]byte, size)
+	}
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate random token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func skillLoopDataRoot() (string, error) {
@@ -508,4 +535,82 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+func sessionFileByID(repoRoot string, id string) (string, error) {
+	files, err := sessionFilePaths(SessionsRoot(repoRoot))
+	if err != nil {
+		return "", err
+	}
+
+	for _, sessionFile := range files {
+		meta, err := LoadFromPath(sessionFile)
+		if err != nil {
+			continue
+		}
+		if meta.ID == id {
+			return sessionFile, nil
+		}
+	}
+
+	return "", os.ErrNotExist
+}
+
+func sessionFilePaths(root string) ([]string, error) {
+	files := make([]string, 0)
+	if _, err := os.Stat(root); err != nil {
+		return nil, err
+	}
+
+	if err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Name() == "session.json" {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+func sanitizePathSegment(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "default"
+	}
+
+	var b strings.Builder
+	lastDash := false
+	for _, r := range trimmed {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastDash = false
+		case r == '-', r == '_':
+			if b.Len() == 0 || lastDash {
+				continue
+			}
+			b.WriteByte('-')
+			lastDash = true
+		default:
+			if b.Len() == 0 || lastDash {
+				continue
+			}
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+
+	name := strings.Trim(strings.ToLower(b.String()), "-")
+	if name == "" {
+		return "default"
+	}
+	return name
 }

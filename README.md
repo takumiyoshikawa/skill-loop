@@ -51,6 +51,7 @@ And `tmux` must be installed (skill execution is tmux-backed).
 Create a `skill-loop.yml` in your project:
 
 ```yaml
+name: feature-review
 default_entrypoint: 1-impl
 max_iterations: 10
 
@@ -97,6 +98,7 @@ Use `skill-loop run --attach` to start detached and immediately attach to its tm
 For periodic execution, add `schedule` with standard 5-field cron syntax:
 
 ```yaml
+name: daily-check
 schedule: "0 9 * * *"
 default_entrypoint: staleness-check
 max_iterations: 10
@@ -171,6 +173,7 @@ skill-loop run --entrypoint 2-review
 
 | Field                  | Type   | Required | Description                                                              |
 | ---------------------- | ------ | -------- | ------------------------------------------------------------------------ |
+| `name`                 | string | No       | Workflow name used for session storage under `~/.local/share/skill-loop/<name>/` |
 | `schedule`             | string | No       | Optional cron schedule in standard 5-field crontab syntax for periodic execution |
 | `default_entrypoint`   | string | Yes      | Default skill name to start with (unless overridden via `--entrypoint`)  |
 | `max_iterations`       | int    | No       | Maximum loop iterations (default: 100)                                   |
@@ -222,18 +225,19 @@ Routes are evaluated top-to-bottom. The first matching route is selected. A rout
 Each detached run is recorded under:
 
 ```
-~/.local/share/skill-loop/sessions/<session-id>/
+~/.local/share/skill-loop/<name>/<random-name>/
   session.json
   stdout.log
   stderr.log
 ```
 
-Session files are stored under `~/.local/share/skill-loop/sessions`.
+Session files are stored under `~/.local/share/skill-loop/<name>/<random-name>`.
 Commands like `skill-loop sessions ls` still scope results to the current repository by matching the recorded repo root.
 
 ```bash
 skill-loop sessions ls
-skill-loop sessions show <session-id>
+skill-loop sessions show
+skill-loop sessions inspect <session-id>
 skill-loop sessions logs <session-id>
 skill-loop sessions logs <session-id> --stderr
 skill-loop sessions logs <session-id> --tail 200
@@ -246,6 +250,7 @@ skill-loop sessions prune --all
 
 `skill-loop run` also prints the session directory plus the captured `stdout.log` and `stderr.log` paths when a detached run starts.
 Scheduled sessions appear in `skill-loop sessions ls` with `scheduled` status and a `next:` timestamp. When a scheduled workflow is actively executing, the session switches to `running` and reports `iter: current/max`.
+Use `skill-loop sessions show` to launch the embedded React dashboard for the current repository and manage sessions from your browser.
 
 ## Architecture
 

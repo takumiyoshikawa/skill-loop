@@ -66,11 +66,12 @@ Use --attach to attach to that tmux session immediately.`,
 			}
 
 			childArgs := buildRunChildArgs(cfgPath, maxIterations, prompt, entrypoint)
+			workflowName := cfg.EffectiveName(cfgPath)
 			var meta *session.Metadata
 			if cfg.Schedule != "" {
-				meta, err = startDetachedScheduledRun(cfg, cfgPath, childArgs, maxIterations, entrypoint)
+				meta, err = startDetachedScheduledRun(cfg, cfgPath, workflowName, childArgs, maxIterations, entrypoint)
 			} else {
-				meta, err = startDetachedRun(cfgPath, childArgs)
+				meta, err = startDetachedRun(cfgPath, workflowName, childArgs)
 			}
 			if err != nil {
 				return err
@@ -126,14 +127,14 @@ func buildRunChildArgs(cfgPath string, maxIterations int, prompt string, entrypo
 	return args
 }
 
-func startDetachedRun(cfgPath string, childArgs []string) (*session.Metadata, error) {
-	return startDetachedSession(cfgPath, childArgs, map[string]string{
+func startDetachedRun(cfgPath string, workflowName string, childArgs []string) (*session.Metadata, error) {
+	return startDetachedSession(cfgPath, workflowName, childArgs, map[string]string{
 		"SKILL_LOOP_RUN_CHILD": "1",
 	})
 }
 
-func startDetachedScheduledRun(cfg *config.Config, cfgPath string, childArgs []string, maxIterations int, entrypoint string) (*session.Metadata, error) {
-	meta, err := startDetachedSession(cfgPath, childArgs, map[string]string{
+func startDetachedScheduledRun(cfg *config.Config, cfgPath string, workflowName string, childArgs []string, maxIterations int, entrypoint string) (*session.Metadata, error) {
+	meta, err := startDetachedSession(cfgPath, workflowName, childArgs, map[string]string{
 		"SKILL_LOOP_SCHEDULE_CHILD": "1",
 	})
 	if err != nil {
@@ -171,7 +172,7 @@ func startDetachedScheduledRun(cfg *config.Config, cfgPath string, childArgs []s
 	return meta, nil
 }
 
-func startDetachedSession(cfgPath string, childArgs []string, childEnv map[string]string) (*session.Metadata, error) {
+func startDetachedSession(cfgPath string, workflowName string, childArgs []string, childEnv map[string]string) (*session.Metadata, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("get working directory: %w", err)
@@ -203,7 +204,7 @@ func startDetachedSession(cfgPath string, childArgs []string, childEnv map[strin
 		workingDir = repoRoot
 	}
 
-	meta, err := session.New(repoRoot, workingDir, "orchestrator", "skill-loop", command, 0, 0)
+	meta, err := session.New(repoRoot, workingDir, workflowName, "orchestrator", "skill-loop", command, 0, 0)
 	if err != nil {
 		return nil, err
 	}

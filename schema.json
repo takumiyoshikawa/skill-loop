@@ -26,6 +26,10 @@
     },
     "Config": {
       "properties": {
+        "name": {
+          "type": "string",
+          "description": "Workflow name used for grouping run sessions under ~/.local/share/skill-loop/\u003cname\u003e/. When omitted the config filename is used."
+        },
         "schedule": {
           "type": "string",
           "description": "Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."
