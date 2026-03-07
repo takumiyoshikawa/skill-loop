@@ -24,7 +24,7 @@ func TestSessionsRoot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	repoRoot := "/tmp/test-repo"
-	expected := filepath.Join(home, ".local", "share", "skill-loop", "sessions")
+	expected := filepath.Join(home, ".local", "share", "skill-loop")
 	got := SessionsRoot(repoRoot)
 	if got != expected {
 		t.Errorf("expected %s, got %s", expected, got)
@@ -37,7 +37,7 @@ func TestNew(t *testing.T) {
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
-		meta, err := New(tempDir, tempDir, "test-skill", "claude", command, 10*time.Second, 2)
+		meta, err := New(tempDir, tempDir, "nightly-review", "test-skill", "claude", command, 10*time.Second, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -50,6 +50,12 @@ func TestNew(t *testing.T) {
 		}
 		if meta.Runtime != "claude" {
 			t.Errorf("expected runtime 'claude', got %s", meta.Runtime)
+		}
+		if meta.WorkflowName != "nightly-review" {
+			t.Errorf("expected workflow 'nightly-review', got %s", meta.WorkflowName)
+		}
+		if meta.StorageName == "" {
+			t.Error("expected non-empty storage name")
 		}
 		if meta.Status != StatusPending {
 			t.Errorf("expected status %s, got %s", StatusPending, meta.Status)
@@ -65,7 +71,7 @@ func TestNew(t *testing.T) {
 	t.Run("returns error when command is empty", func(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
-		_, err := New(tempDir, tempDir, "test-skill", "claude", []string{}, 10*time.Second, 2)
+		_, err := New(tempDir, tempDir, "nightly-review", "test-skill", "claude", []string{}, 10*time.Second, 2)
 		if err == nil {
 			t.Error("expected error for empty command")
 		}
@@ -76,7 +82,7 @@ func TestNew(t *testing.T) {
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
-		meta, err := New(tempDir, tempDir, "test-skill", "claude", command, 0, 2)
+		meta, err := New(tempDir, tempDir, "nightly-review", "test-skill", "claude", command, 0, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -91,7 +97,7 @@ func TestNew(t *testing.T) {
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
-		meta, err := New(tempDir, tempDir, "test-skill", "claude", command, 10*time.Second, -1)
+		meta, err := New(tempDir, tempDir, "nightly-review", "test-skill", "claude", command, 10*time.Second, -1)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -107,7 +113,7 @@ func TestSaveAndLoad(t *testing.T) {
 	tempDir := t.TempDir()
 	command := []string{"echo", "hello"}
 
-	meta, err := New(tempDir, tempDir, "test-skill", "claude", command, 10*time.Second, 2)
+	meta, err := New(tempDir, tempDir, "nightly-review", "test-skill", "claude", command, 10*time.Second, 2)
 	if err != nil {
 		t.Fatalf("unexpected error creating session: %v", err)
 	}
@@ -146,14 +152,14 @@ func TestList(t *testing.T) {
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
-		meta1, err := New(tempDir, tempDir, "skill-1", "claude", command, 10*time.Second, 2)
+		meta1, err := New(tempDir, tempDir, "workflow-a", "skill-1", "claude", command, 10*time.Second, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
 		time.Sleep(10 * time.Millisecond)
 
-		meta2, err := New(tempDir, tempDir, "skill-2", "claude", command, 10*time.Second, 2)
+		meta2, err := New(tempDir, tempDir, "workflow-b", "skill-2", "claude", command, 10*time.Second, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -182,11 +188,11 @@ func TestList(t *testing.T) {
 		repoTwo := t.TempDir()
 		command := []string{"echo", "hello"}
 
-		meta1, err := New(repoOne, repoOne, "skill-1", "claude", command, 10*time.Second, 2)
+		meta1, err := New(repoOne, repoOne, "workflow-a", "skill-1", "claude", command, 10*time.Second, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, err := New(repoTwo, repoTwo, "skill-2", "claude", command, 10*time.Second, 2); err != nil {
+		if _, err := New(repoTwo, repoTwo, "workflow-b", "skill-2", "claude", command, 10*time.Second, 2); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -208,12 +214,12 @@ func TestDeleteByID(t *testing.T) {
 		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
-		meta, err := New(tempDir, tempDir, "skill-1", "claude", command, 10*time.Second, 2)
+		meta, err := New(tempDir, tempDir, "nightly-review", "skill-1", "claude", command, 10*time.Second, 2)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		sessionDir := filepath.Join(SessionsRoot(tempDir), meta.ID)
+		sessionDir := filepath.Dir(meta.ScriptPath)
 		if _, err := os.Stat(sessionDir); err != nil {
 			t.Fatalf("expected session directory to exist: %v", err)
 		}

@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
 
+name: e2e-skill-loop
 default_entrypoint: 1-impl
 max_iterations: 5
 

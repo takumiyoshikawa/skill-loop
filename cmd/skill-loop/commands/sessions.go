@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/takumiyoshikawa/skill-loop/internal/session"
+	"github.com/takumiyoshikawa/skill-loop/internal/sessionui"
 )
 
 func NewSessionsCmd() *cobra.Command {
@@ -23,6 +26,7 @@ func NewSessionsCmd() *cobra.Command {
 
 	cmd.AddCommand(newSessionsLsCmd())
 	cmd.AddCommand(newSessionsShowCmd())
+	cmd.AddCommand(newSessionsInspectCmd())
 	cmd.AddCommand(newSessionsLogsCmd())
 	cmd.AddCommand(newSessionsAttachCmd())
 	cmd.AddCommand(newSessionsStopCmd())
@@ -88,8 +92,63 @@ func newSessionsLsCmd() *cobra.Command {
 }
 
 func newSessionsShowCmd() *cobra.Command {
+	var host string
+	var port int
+	var openBrowser bool
+
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Open the local sessions web UI for the current repository",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoRoot, err := session.ResolveRepoRoot("")
+			if err != nil {
+				return err
+			}
+
+			handler, err := sessionui.NewHandler(repoRoot)
+			if err != nil {
+				return err
+			}
+
+			addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
+			listener, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+			baseURL := fmt.Sprintf("http://%s", listener.Addr().String())
+
+			if openBrowser {
+				if err := sessionui.OpenBrowser(baseURL); err != nil {
+					if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warn: failed to open browser: %v\n", err); writeErr != nil {
+						return writeErr
+					}
+				}
+			}
+
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Serving sessions UI at %s\n", baseURL); err != nil {
+				return err
+			}
+
+			server := &http.Server{
+				Addr:              addr,
+				Handler:           handler,
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			return server.Serve(listener)
+		},
+	}
+
+	cmd.Flags().StringVar(&host, "host", "127.0.0.1", "Host interface to bind the local UI server to")
+	cmd.Flags().IntVar(&port, "port", 7317, "Port for the local UI server")
+	cmd.Flags().BoolVar(&openBrowser, "open", true, "Open the sessions UI in your browser")
+
+	return cmd
+}
+
+func newSessionsInspectCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show <session-id>",
+		Use:   "inspect <session-id>",
 		Short: "Show session metadata including log paths and last error",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -265,7 +324,7 @@ func loadRunSessionByID(id string) (*session.Metadata, error) {
 	}
 	meta, err := session.LoadByID(repoRoot, id)
 	if err != nil {
-		return nil, fmt.Errorf("load session %s: %w (expected at %s)", id, err, filepath.Join(session.SessionsRoot(repoRoot), id, "session.json"))
+		return nil, fmt.Errorf("load session %s: %w", id, err)
 	}
 	if meta.Skill != "orchestrator" {
 		return nil, fmt.Errorf("session %s is not a run session", id)
@@ -431,6 +490,9 @@ func formatSessionDetail(meta *session.Metadata) string {
 }
 
 func sessionConfigName(meta *session.Metadata) string {
+	if meta.WorkflowName != "" {
+		return meta.WorkflowName
+	}
 	if meta.ConfigPath == "" {
 		return "-"
 	}

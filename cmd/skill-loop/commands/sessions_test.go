@@ -105,3 +105,15 @@ func TestPrintLogSectionEmpty(t *testing.T) {
 		t.Fatalf("printLogSection() missing empty marker:\n%s", got)
 	}
 }
+
+func TestSessionsShowArgs(t *testing.T) {
+	t.Run("show rejects positional args", func(t *testing.T) {
+		cmd := newSessionsShowCmd()
+		if err := cmd.Args(cmd, nil); err != nil {
+			t.Fatalf("Args() error: %v", err)
+		}
+		if err := cmd.Args(cmd, []string{"session-123"}); err == nil {
+			t.Fatal("Args() should reject positional args")
+		}
+	})
+}

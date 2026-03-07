@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"unicode"
 
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
@@ -26,6 +29,7 @@ type Skill struct {
 }
 
 type Config struct {
+	Name               string           `yaml:"name,omitempty" jsonschema:"description=Workflow name used for grouping run sessions under ~/.local/share/skill-loop/<name>/. When omitted the config filename is used."`
 	Schedule           string           `yaml:"schedule,omitempty" jsonschema:"description=Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."`
 	DefaultEntrypoint  string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
 	MaxIterations      int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
@@ -105,6 +109,15 @@ func (c *Config) EffectiveMaxRestarts() int {
 	return *c.MaxRestarts
 }
 
+func (c *Config) EffectiveName(path string) string {
+	name := strings.TrimSpace(c.Name)
+	if name == "" {
+		base := filepath.Base(path)
+		name = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return sanitizeName(name)
+}
+
 func (c *Config) ValidateEntrypoint(entrypoint string) error {
 	if entrypoint == "" {
 		return fmt.Errorf("entrypoint is required")
@@ -115,4 +128,35 @@ func (c *Config) ValidateEntrypoint(entrypoint string) error {
 	}
 
 	return nil
+}
+
+func sanitizeName(input string) string {
+	var b strings.Builder
+	lastDash := false
+
+	for _, r := range strings.TrimSpace(input) {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+			lastDash = false
+		case r == '-', r == '_':
+			if b.Len() == 0 || lastDash {
+				continue
+			}
+			b.WriteByte('-')
+			lastDash = true
+		default:
+			if b.Len() == 0 || lastDash {
+				continue
+			}
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+
+	name := strings.Trim(b.String(), "-")
+	if name == "" {
+		return "default"
+	}
+	return name
 }

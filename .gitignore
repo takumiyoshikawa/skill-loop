@@ -1,2 +1,5 @@
 /.skill-loop/
 /skill-loop
+
+node_modules/
+dist/

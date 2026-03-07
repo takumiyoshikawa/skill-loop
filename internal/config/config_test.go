@@ -11,6 +11,7 @@ func TestLoadValidConfig(t *testing.T) {
 	cfgFile := filepath.Join(tmpDir, "config.yml")
 
 	content := []byte(`default_entrypoint: impl
+name: nightly-review
 skills:
   impl:
     agent:
@@ -43,6 +44,9 @@ skills:
 	if cfg.DefaultEntrypoint != "impl" {
 		t.Errorf("DefaultEntrypoint = %q, want %q", cfg.DefaultEntrypoint, "impl")
 	}
+	if cfg.Name != "nightly-review" {
+		t.Errorf("Name = %q, want %q", cfg.Name, "nightly-review")
+	}
 
 	if len(cfg.Skills) != 2 {
 		t.Errorf("len(Skills) = %d, want 2", len(cfg.Skills))
@@ -62,6 +66,9 @@ skills:
 
 	if cfg.EffectiveMaxRestarts() != 2 {
 		t.Errorf("EffectiveMaxRestarts = %d, want 2", cfg.EffectiveMaxRestarts())
+	}
+	if got := cfg.EffectiveName(cfgFile); got != "nightly-review" {
+		t.Errorf("EffectiveName() = %q, want %q", got, "nightly-review")
 	}
 
 	implRoutes := cfg.Skills["impl"].Next
@@ -257,6 +264,14 @@ func TestLoadNonexistentFile(t *testing.T) {
 	_, err := Load("/nonexistent/path/config.yml")
 	if err == nil {
 		t.Error("Load() should return error for nonexistent file")
+	}
+}
+
+func TestEffectiveNameFallsBackToConfigFilename(t *testing.T) {
+	cfg := &Config{}
+	got := cfg.EffectiveName("/tmp/My Workflow.yml")
+	if got != "my-workflow" {
+		t.Fatalf("EffectiveName() = %q, want %q", got, "my-workflow")
 	}
 }
 
