@@ -26,6 +26,10 @@
     },
     "Config": {
       "properties": {
+        "schedule": {
+          "type": "string",
+          "description": "Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."
+        },
         "default_entrypoint": {
           "type": "string",
           "description": "Default skill to start the loop with. Must exist in the skills map."

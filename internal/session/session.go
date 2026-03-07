@@ -23,12 +23,13 @@ const (
 type Status string
 
 const (
-	StatusPending Status = "pending"
-	StatusRunning Status = "running"
-	StatusIdle    Status = "idle"
-	StatusDone    Status = "done"
-	StatusFailed  Status = "failed"
-	StatusStopped Status = "stopped"
+	StatusPending   Status = "pending"
+	StatusScheduled Status = "scheduled"
+	StatusRunning   Status = "running"
+	StatusIdle      Status = "idle"
+	StatusDone      Status = "done"
+	StatusFailed    Status = "failed"
+	StatusStopped   Status = "stopped"
 )
 
 type Metadata struct {
@@ -37,6 +38,8 @@ type Metadata struct {
 	Runtime            string     `json:"runtime"`
 	RepoRoot           string     `json:"repo_root"`
 	WorkingDir         string     `json:"working_dir"`
+	ConfigPath         string     `json:"config_path,omitempty"`
+	Schedule           string     `json:"schedule,omitempty"`
 	Command            []string   `json:"command"`
 	TmuxSession        string     `json:"tmux_session"`
 	ScriptPath         string     `json:"script_path"`
@@ -48,6 +51,10 @@ type Metadata struct {
 	StartedAt          time.Time  `json:"started_at"`
 	LastOutputAt       time.Time  `json:"last_output_at"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
+	NextRun            *time.Time `json:"next_run,omitempty"`
+	CurrentIteration   int        `json:"current_iteration,omitempty"`
+	MaxIterations      int        `json:"max_iterations,omitempty"`
+	CurrentSkill       string     `json:"current_skill,omitempty"`
 	IdleTimeoutSeconds int        `json:"idle_timeout_seconds"`
 	MaxRestarts        int        `json:"max_restarts"`
 	RestartCount       int        `json:"restart_count"`
@@ -342,7 +349,7 @@ func Reconcile(meta *Metadata) error {
 		return err
 	}
 	if hasSession {
-		if meta.Status != StatusRunning {
+		if meta.Status == StatusPending {
 			meta.Status = StatusRunning
 			meta.EndedAt = nil
 			return Save(meta)
@@ -420,6 +427,8 @@ func writeScript(meta *Metadata) error {
 		"#!/bin/bash",
 		"set +euo pipefail",
 		"cd " + shellQuote(meta.WorkingDir),
+		"export SKILL_LOOP_SESSION_ID=" + shellQuote(meta.ID),
+		"export SKILL_LOOP_SESSION_REPO_ROOT=" + shellQuote(meta.RepoRoot),
 		"{ " + cmdLine.String() + " 2> >(tee -a " + shellQuote(meta.StderrPath) + " >&2); } | tee -a " + shellQuote(meta.StdoutPath),
 		"code=${PIPESTATUS[0]}",
 		"echo \"$code\" > " + shellQuote(meta.ExitCodePath),

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
+
+schedule: "*/5 * * * *"
+default_entrypoint: hello
+max_iterations: 1
+
+skills:
+  hello:
+    agent:
+      runtime: claude
+      model: claude-sonnet-4-5
+      args:
+        - "--dangerously-skip-permissions"
+    next:
+      - skill: "<DONE>"

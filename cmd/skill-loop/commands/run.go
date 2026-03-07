@@ -4,13 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 
 	"github.com/takumiyoshikawa/skill-loop/internal/config"
 	"github.com/takumiyoshikawa/skill-loop/internal/orchestrator"
+	"github.com/takumiyoshikawa/skill-loop/internal/scheduler"
 	"github.com/takumiyoshikawa/skill-loop/internal/session"
 )
 
@@ -41,13 +45,33 @@ Use --attach to attach to that tmux session immediately.`,
 				return err
 			}
 
+			if os.Getenv("SKILL_LOOP_SCHEDULE_CHILD") == "1" {
+				sessionID := os.Getenv("SKILL_LOOP_SESSION_ID")
+				if sessionID == "" {
+					return fmt.Errorf("SKILL_LOOP_SESSION_ID is required in schedule child mode")
+				}
+				repoRoot := os.Getenv("SKILL_LOOP_SESSION_REPO_ROOT")
+				if repoRoot == "" {
+					repoRoot, err = session.ResolveRepoRoot("")
+					if err != nil {
+						return err
+					}
+				}
+				return scheduler.Run(repoRoot, sessionID, cfg, maxIterations, prompt, entrypoint)
+			}
+
 			// Child mode for detached orchestrator process.
 			if os.Getenv("SKILL_LOOP_RUN_CHILD") == "1" {
 				return orchestrator.Run(cfg, maxIterations, prompt, entrypoint)
 			}
 
 			childArgs := buildRunChildArgs(cfgPath, maxIterations, prompt, entrypoint)
-			meta, err := startDetachedRun(childArgs)
+			var meta *session.Metadata
+			if cfg.Schedule != "" {
+				meta, err = startDetachedScheduledRun(cfg, cfgPath, childArgs, maxIterations, entrypoint)
+			} else {
+				meta, err = startDetachedRun(cfgPath, childArgs)
+			}
 			if err != nil {
 				return err
 			}
@@ -102,7 +126,52 @@ func buildRunChildArgs(cfgPath string, maxIterations int, prompt string, entrypo
 	return args
 }
 
-func startDetachedRun(childArgs []string) (*session.Metadata, error) {
+func startDetachedRun(cfgPath string, childArgs []string) (*session.Metadata, error) {
+	return startDetachedSession(cfgPath, childArgs, map[string]string{
+		"SKILL_LOOP_RUN_CHILD": "1",
+	})
+}
+
+func startDetachedScheduledRun(cfg *config.Config, cfgPath string, childArgs []string, maxIterations int, entrypoint string) (*session.Metadata, error) {
+	meta, err := startDetachedSession(cfgPath, childArgs, map[string]string{
+		"SKILL_LOOP_SCHEDULE_CHILD": "1",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	effectiveMaxIterations := maxIterations
+	if effectiveMaxIterations <= 0 {
+		effectiveMaxIterations = cfg.MaxIterations
+	}
+	if effectiveMaxIterations <= 0 {
+		effectiveMaxIterations = orchestrator.DefaultMaxIterations
+	}
+
+	schedule, err := cron.ParseStandard(cfg.Schedule)
+	if err != nil {
+		return nil, fmt.Errorf("parse schedule: %w", err)
+	}
+	nextRun := schedule.Next(time.Now())
+
+	meta.Schedule = cfg.Schedule
+	meta.Status = session.StatusScheduled
+	meta.NextRun = &nextRun
+	meta.CurrentIteration = 0
+	meta.MaxIterations = effectiveMaxIterations
+	meta.CurrentSkill = ""
+	meta.LastError = ""
+	meta.EndedAt = nil
+	meta.ConfigPath = cfgPath
+
+	if err := session.Save(meta); err != nil {
+		return nil, fmt.Errorf("persist scheduled session metadata: %w", err)
+	}
+
+	return meta, nil
+}
+
+func startDetachedSession(cfgPath string, childArgs []string, childEnv map[string]string) (*session.Metadata, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("get working directory: %w", err)
@@ -122,11 +191,15 @@ func startDetachedRun(childArgs []string) (*session.Metadata, error) {
 		return nil, fmt.Errorf("resolve absolute executable path: %w", err)
 	}
 
-	command := append([]string{"env", "SKILL_LOOP_RUN_CHILD=1", exePath}, childArgs...)
+	command := append([]string{"env"}, envAssignments(childEnv)...)
+	command = append(command, exePath)
+	command = append(command, childArgs...)
 	workingDir := wd
 	// `go run` builds into a temporary location; use source invocation for detached child.
 	if strings.Contains(exePath, string(filepath.Separator)+"go-build") {
-		command = append([]string{"env", "SKILL_LOOP_RUN_CHILD=1", "go", "run", "./cmd/skill-loop"}, childArgs...)
+		command = append([]string{"env"}, envAssignments(childEnv)...)
+		command = append(command, "go", "run", "./cmd/skill-loop")
+		command = append(command, childArgs...)
 		workingDir = repoRoot
 	}
 
@@ -134,6 +207,7 @@ func startDetachedRun(childArgs []string) (*session.Metadata, error) {
 	if err != nil {
 		return nil, err
 	}
+	meta.ConfigPath = cfgPath
 
 	if err := session.Start(meta); err != nil {
 		cleanupErr := os.RemoveAll(filepath.Dir(meta.ScriptPath))
@@ -144,4 +218,17 @@ func startDetachedRun(childArgs []string) (*session.Metadata, error) {
 	}
 
 	return meta, nil
+}
+
+func envAssignments(env map[string]string) []string {
+	if len(env) == 0 {
+		return nil
+	}
+
+	assignments := make([]string, 0, len(env))
+	for key, value := range env {
+		assignments = append(assignments, key+"="+value)
+	}
+	sort.Strings(assignments)
+	return assignments
 }
