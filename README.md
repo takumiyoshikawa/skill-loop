@@ -184,22 +184,29 @@ Routes are evaluated top-to-bottom. The first matching route is selected. A rout
 Each detached run is recorded under:
 
 ```
-<repo-root>/.skill-loop/sessions/<session-id>/
+~/.local/share/skill-loop/sessions/<session-id>/
   session.json
   stdout.log
   stderr.log
 ```
 
-Session root is resolved from `git rev-parse --show-toplevel` (fallback: current directory).
+Session files are stored under `~/.local/share/skill-loop/sessions`.
+Commands like `skill-loop sessions ls` still scope results to the current repository by matching the recorded repo root.
 
 ```bash
 skill-loop sessions ls
+skill-loop sessions show <session-id>
+skill-loop sessions logs <session-id>
+skill-loop sessions logs <session-id> --stderr
+skill-loop sessions logs <session-id> --tail 200
 skill-loop sessions attach <session-id>
 skill-loop sessions stop <session-id>
 skill-loop sessions prune
 skill-loop sessions prune --dry-run
 skill-loop sessions prune --all
 ```
+
+`skill-loop run` also prints the session directory plus the captured `stdout.log` and `stderr.log` paths when a detached run starts.
 
 ## Architecture
 
