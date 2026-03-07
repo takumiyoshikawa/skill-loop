@@ -2,7 +2,15 @@
   "name": "skill-loop-sessionui",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.30.3",
   "type": "module",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^24.0.0",
+      "onFail": "download"
+    }
+  },
   "scripts": {
     "build": "vite build"
   },
