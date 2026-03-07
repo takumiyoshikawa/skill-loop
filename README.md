@@ -22,6 +22,8 @@ Chain multiple coding-agent skills together in a loop-based workflow. Define ski
 3. Each skill produces a summary; routing rules match substrings in the summary to decide the next skill
 4. The loop continues until a route resolves to `<DONE>` or `max_iterations` is reached
 
+When `schedule` is set, the detached tmux session stays resident and waits for the next cron match instead of running immediately. Each cron tick starts a fresh workflow from the configured entrypoint.
+
 ## Installation
 
 ### Homebrew (macOS / Linux)
@@ -92,6 +94,24 @@ skill-loop run
 `skill-loop run` starts in background by default and prints a `run_id`.
 Use `skill-loop run --attach` to start detached and immediately attach to its tmux session.
 
+For periodic execution, add `schedule` with standard 5-field cron syntax:
+
+```yaml
+schedule: "0 9 * * *"
+default_entrypoint: staleness-check
+max_iterations: 10
+
+skills:
+  staleness-check:
+    agent:
+      runtime: claude
+      model: claude-sonnet-4-5-20250929
+      args:
+        - "--dangerously-skip-permissions"
+    next:
+      - skill: "<DONE>"
+```
+
 ## Usage
 
 ```bash
@@ -104,7 +124,24 @@ skill-loop run [config.yml] [flags]
 | `--prompt`         | Initial prompt passed to the first skill                            |
 | `--max-iterations` | Override the config's `max_iterations` value                        |
 | `--entrypoint`     | Start from a specific skill (overrides config `default_entrypoint`) |
-| `--attach`         | Attach to the detached run session immediately                       |
+| `--attach`         | Attach to the detached run session immediately                      |
+
+### Scheduled runs
+
+If `schedule` is present, `skill-loop run` starts a resident scheduler inside tmux. The process waits until the next cron match, runs the workflow once, then waits again.
+
+```bash
+skill-loop run skill-loop.yml
+skill-loop sessions ls
+```
+
+Example:
+
+```text
+ID                    STATUS     DETAILS                    CONFIG          STARTED
+20260307T090000Z-ab   scheduled  next: 2026-03-08 09:00:00 skill-loop.yml  2026-03-07T09:00:00Z
+20260307T091000Z-cd   running    iter: 3/10                ci-watch.yml    2026-03-07T09:10:00Z
+```
 
 ### Examples
 
@@ -134,6 +171,7 @@ skill-loop run --entrypoint 2-review
 
 | Field                  | Type   | Required | Description                                                              |
 | ---------------------- | ------ | -------- | ------------------------------------------------------------------------ |
+| `schedule`             | string | No       | Optional cron schedule in standard 5-field crontab syntax for periodic execution |
 | `default_entrypoint`   | string | Yes      | Default skill name to start with (unless overridden via `--entrypoint`)  |
 | `max_iterations`       | int    | No       | Maximum loop iterations (default: 100)                                   |
 | `idle_timeout_seconds` | int    | No       | Idle timeout for each skill execution before auto-restart (default: 900) |
@@ -184,22 +222,30 @@ Routes are evaluated top-to-bottom. The first matching route is selected. A rout
 Each detached run is recorded under:
 
 ```
-<repo-root>/.skill-loop/sessions/<session-id>/
+~/.local/share/skill-loop/sessions/<session-id>/
   session.json
   stdout.log
   stderr.log
 ```
 
-Session root is resolved from `git rev-parse --show-toplevel` (fallback: current directory).
+Session files are stored under `~/.local/share/skill-loop/sessions`.
+Commands like `skill-loop sessions ls` still scope results to the current repository by matching the recorded repo root.
 
 ```bash
 skill-loop sessions ls
+skill-loop sessions show <session-id>
+skill-loop sessions logs <session-id>
+skill-loop sessions logs <session-id> --stderr
+skill-loop sessions logs <session-id> --tail 200
 skill-loop sessions attach <session-id>
 skill-loop sessions stop <session-id>
 skill-loop sessions prune
 skill-loop sessions prune --dry-run
 skill-loop sessions prune --all
 ```
+
+`skill-loop run` also prints the session directory plus the captured `stdout.log` and `stderr.log` paths when a detached run starts.
+Scheduled sessions appear in `skill-loop sessions ls` with `scheduled` status and a `next:` timestamp. When a scheduled workflow is actively executing, the session switches to `running` and reports `iter: current/max`.
 
 ## Architecture
 
@@ -209,6 +255,7 @@ internal/
   config/                YAML config loading & validation
   executor/              Agent CLI invocation & output parsing
   orchestrator/          Loop control, routing, iteration management
+  scheduler/             Cron-backed resident execution loop
   session/               tmux session lifecycle + session metadata/log storage
 ```
 

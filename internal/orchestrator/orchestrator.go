@@ -16,6 +16,10 @@ type SkillExecutor interface {
 	ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts executor.ExecutionOptions) (*executor.SkillResult, error)
 }
 
+type RunObserver interface {
+	IterationStarted(iteration int, maxIterations int, skill string)
+}
+
 // defaultExecutor delegates to the real executor package.
 type defaultExecutor struct{}
 
@@ -24,10 +28,22 @@ func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, 
 }
 
 func Run(cfg *config.Config, maxIterations int, prompt string, entrypoint string) error {
-	return RunWith(cfg, maxIterations, prompt, entrypoint, &defaultExecutor{})
+	return runWith(cfg, maxIterations, prompt, entrypoint, &defaultExecutor{}, nil)
 }
 
 func RunWith(cfg *config.Config, maxIterations int, prompt string, entrypoint string, exec SkillExecutor) error {
+	return runWith(cfg, maxIterations, prompt, entrypoint, exec, nil)
+}
+
+func RunObserved(cfg *config.Config, maxIterations int, prompt string, entrypoint string, observer RunObserver) error {
+	return runWith(cfg, maxIterations, prompt, entrypoint, &defaultExecutor{}, observer)
+}
+
+func RunWithObserver(cfg *config.Config, maxIterations int, prompt string, entrypoint string, exec SkillExecutor, observer RunObserver) error {
+	return runWith(cfg, maxIterations, prompt, entrypoint, exec, observer)
+}
+
+func runWith(cfg *config.Config, maxIterations int, prompt string, entrypoint string, exec SkillExecutor, observer RunObserver) error {
 	if maxIterations <= 0 {
 		maxIterations = cfg.MaxIterations
 	}
@@ -50,6 +66,10 @@ func RunWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 		skill, ok := cfg.Skills[currentSkill]
 		if !ok {
 			return fmt.Errorf("skill %q not found in config", currentSkill)
+		}
+
+		if observer != nil {
+			observer.IterationStarted(i+1, maxIterations, currentSkill)
 		}
 
 		fmt.Printf("==> Running skill: %s (iteration %d)\n", currentSkill, i+1)

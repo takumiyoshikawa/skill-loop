@@ -23,12 +23,13 @@ const (
 type Status string
 
 const (
-	StatusPending Status = "pending"
-	StatusRunning Status = "running"
-	StatusIdle    Status = "idle"
-	StatusDone    Status = "done"
-	StatusFailed  Status = "failed"
-	StatusStopped Status = "stopped"
+	StatusPending   Status = "pending"
+	StatusScheduled Status = "scheduled"
+	StatusRunning   Status = "running"
+	StatusIdle      Status = "idle"
+	StatusDone      Status = "done"
+	StatusFailed    Status = "failed"
+	StatusStopped   Status = "stopped"
 )
 
 type Metadata struct {
@@ -37,6 +38,8 @@ type Metadata struct {
 	Runtime            string     `json:"runtime"`
 	RepoRoot           string     `json:"repo_root"`
 	WorkingDir         string     `json:"working_dir"`
+	ConfigPath         string     `json:"config_path,omitempty"`
+	Schedule           string     `json:"schedule,omitempty"`
 	Command            []string   `json:"command"`
 	TmuxSession        string     `json:"tmux_session"`
 	ScriptPath         string     `json:"script_path"`
@@ -48,6 +51,10 @@ type Metadata struct {
 	StartedAt          time.Time  `json:"started_at"`
 	LastOutputAt       time.Time  `json:"last_output_at"`
 	EndedAt            *time.Time `json:"ended_at,omitempty"`
+	NextRun            *time.Time `json:"next_run,omitempty"`
+	CurrentIteration   int        `json:"current_iteration,omitempty"`
+	MaxIterations      int        `json:"max_iterations,omitempty"`
+	CurrentSkill       string     `json:"current_skill,omitempty"`
 	IdleTimeoutSeconds int        `json:"idle_timeout_seconds"`
 	MaxRestarts        int        `json:"max_restarts"`
 	RestartCount       int        `json:"restart_count"`
@@ -82,7 +89,16 @@ func ResolveRepoRoot(cwd string) (string, error) {
 }
 
 func SessionsRoot(repoRoot string) string {
-	return filepath.Join(repoRoot, ".skill-loop", "sessions")
+	_ = repoRoot
+	root, err := skillLoopDataRoot()
+	if err != nil {
+		// Fall back to the previous relative layout only if home resolution fails.
+		if repoRoot != "" {
+			return filepath.Join(repoRoot, ".skill-loop", "sessions")
+		}
+		return filepath.Join(".skill-loop", "sessions")
+	}
+	return filepath.Join(root, "sessions")
 }
 
 func New(repoRoot string, workingDir string, skill string, runtime string, command []string, idleTimeout time.Duration, maxRestarts int) (*Metadata, error) {
@@ -163,7 +179,14 @@ func Save(meta *Metadata) error {
 
 func LoadByID(repoRoot string, id string) (*Metadata, error) {
 	sessionFilePath := filepath.Join(SessionsRoot(repoRoot), id, "session.json")
-	return LoadFromPath(sessionFilePath)
+	meta, err := LoadFromPath(sessionFilePath)
+	if err != nil {
+		return nil, err
+	}
+	if repoRoot != "" && filepath.Clean(meta.RepoRoot) != filepath.Clean(repoRoot) {
+		return nil, os.ErrNotExist
+	}
+	return meta, nil
 }
 
 func LoadFromPath(path string) (*Metadata, error) {
@@ -195,8 +218,11 @@ func List(repoRoot string) ([]*Metadata, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		meta, err := LoadByID(repoRoot, entry.Name())
+		meta, err := LoadFromPath(filepath.Join(root, entry.Name(), "session.json"))
 		if err != nil {
+			continue
+		}
+		if repoRoot != "" && filepath.Clean(meta.RepoRoot) != filepath.Clean(repoRoot) {
 			continue
 		}
 		metas = append(metas, meta)
@@ -323,7 +349,7 @@ func Reconcile(meta *Metadata) error {
 		return err
 	}
 	if hasSession {
-		if meta.Status != StatusRunning {
+		if meta.Status == StatusPending {
 			meta.Status = StatusRunning
 			meta.EndedAt = nil
 			return Save(meta)
@@ -401,6 +427,8 @@ func writeScript(meta *Metadata) error {
 		"#!/bin/bash",
 		"set +euo pipefail",
 		"cd " + shellQuote(meta.WorkingDir),
+		"export SKILL_LOOP_SESSION_ID=" + shellQuote(meta.ID),
+		"export SKILL_LOOP_SESSION_REPO_ROOT=" + shellQuote(meta.RepoRoot),
 		"{ " + cmdLine.String() + " 2> >(tee -a " + shellQuote(meta.StderrPath) + " >&2); } | tee -a " + shellQuote(meta.StdoutPath),
 		"code=${PIPESTATUS[0]}",
 		"echo \"$code\" > " + shellQuote(meta.ExitCodePath),
@@ -465,6 +493,14 @@ func newID(now time.Time) (string, error) {
 		return "", fmt.Errorf("generate session id: %w", err)
 	}
 	return fmt.Sprintf("%s-%s", now.Format("20060102T150405Z"), hex.EncodeToString(buf)), nil
+}
+
+func skillLoopDataRoot() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return filepath.Join(home, ".local", "share", "skill-loop"), nil
 }
 
 func shellQuote(s string) string {

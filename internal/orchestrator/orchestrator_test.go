@@ -18,6 +18,18 @@ type mockCall struct {
 	err    error
 }
 
+type mockObserver struct {
+	iterations []int
+	maxes      []int
+	skills     []string
+}
+
+func (m *mockObserver) IterationStarted(iteration int, maxIterations int, skill string) {
+	m.iterations = append(m.iterations, iteration)
+	m.maxes = append(m.maxes, maxIterations)
+	m.skills = append(m.skills, skill)
+}
+
 func (m *mockExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
 	if m.callIdx >= len(m.calls) {
 		return nil, fmt.Errorf("unexpected call #%d to ExecuteSkill(%q)", m.callIdx, name)
@@ -291,5 +303,42 @@ func TestRunWithEntrypointOverrideUnknownSkill(t *testing.T) {
 	err := RunWith(cfg, 10, "", "missing", mock)
 	if err == nil {
 		t.Error("RunWith() should return error when overridden entrypoint is unknown")
+	}
+}
+
+func TestRunWithObserver(t *testing.T) {
+	cfg := &config.Config{
+		DefaultEntrypoint: "impl",
+		Skills: map[string]config.Skill{
+			"impl": {
+				Next: []config.Route{{Skill: "review"}},
+			},
+			"review": {
+				Next: []config.Route{{Skill: "<DONE>"}},
+			},
+		},
+	}
+
+	mock := &mockExecutor{
+		calls: []mockCall{
+			{result: &executor.SkillResult{Summary: "implemented"}},
+			{result: &executor.SkillResult{Summary: "reviewed"}},
+		},
+	}
+	observer := &mockObserver{}
+
+	err := RunWithObserver(cfg, 10, "", "", mock, observer)
+	if err != nil {
+		t.Fatalf("RunWithObserver() error: %v", err)
+	}
+
+	if got := len(observer.iterations); got != 2 {
+		t.Fatalf("observer iterations = %d, want 2", got)
+	}
+	if observer.iterations[0] != 1 || observer.iterations[1] != 2 {
+		t.Errorf("observer iterations = %v, want [1 2]", observer.iterations)
+	}
+	if observer.skills[0] != "impl" || observer.skills[1] != "review" {
+		t.Errorf("observer skills = %v, want [impl review]", observer.skills)
 	}
 }
