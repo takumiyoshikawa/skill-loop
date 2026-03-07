@@ -134,7 +134,9 @@ func newSessionsLogsCmd() *cobra.Command {
 			}
 			if stderr {
 				if stdout {
-					fmt.Fprintln(os.Stdout)
+					if _, err := fmt.Fprintln(os.Stdout); err != nil {
+						return err
+					}
 				}
 				if err := printLogSection(os.Stdout, "stderr", meta.StderrPath, tail); err != nil {
 					return err
