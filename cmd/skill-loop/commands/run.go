@@ -148,10 +148,6 @@ func startDetachedScheduledRun(cfg *config.Config, cfgPath string, childArgs []s
 		effectiveMaxIterations = orchestrator.DefaultMaxIterations
 	}
 
-	if entrypoint == "" {
-		entrypoint = cfg.DefaultEntrypoint
-	}
-
 	schedule, err := cron.ParseStandard(cfg.Schedule)
 	if err != nil {
 		return nil, fmt.Errorf("parse schedule: %w", err)

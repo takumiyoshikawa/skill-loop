@@ -289,7 +289,11 @@ if [ "$1" = "has-session" ]; then
   exit 0
 fi
 exit 0
-`), 0o755); err != nil {
+	`), 0o600); err != nil {
+		t.Fatalf("failed to write fake tmux: %v", err)
+	}
+	//nolint:gosec // Test helper script must be executable to stand in for tmux on PATH.
+	if err := os.Chmod(tmuxPath, 0o755); err != nil {
 		t.Fatalf("failed to write fake tmux: %v", err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
