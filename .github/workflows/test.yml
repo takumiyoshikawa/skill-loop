@@ -19,7 +19,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@41ff726566d6b35ff76cfc9dc5f112ca718f4075 # v4.2.0
+        uses: pnpm/action-setup@9fd676a19091d4595eefd76e4bd31c97133911f1 # v4.2.0
         with:
           package_json_file: internal/sessionui/frontend/package.json
           standalone: true
