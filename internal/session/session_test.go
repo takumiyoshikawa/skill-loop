@@ -21,8 +21,10 @@ func TestResolveRepoRoot(t *testing.T) {
 }
 
 func TestSessionsRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	repoRoot := "/tmp/test-repo"
-	expected := filepath.Join(repoRoot, ".skill-loop", "sessions")
+	expected := filepath.Join(home, ".local", "share", "skill-loop", "sessions")
 	got := SessionsRoot(repoRoot)
 	if got != expected {
 		t.Errorf("expected %s, got %s", expected, got)
@@ -31,6 +33,7 @@ func TestSessionsRoot(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Run("creates session with valid parameters", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
@@ -60,6 +63,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("returns error when command is empty", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		_, err := New(tempDir, tempDir, "test-skill", "claude", []string{}, 10*time.Second, 2)
 		if err == nil {
@@ -68,6 +72,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("applies default idle timeout when zero", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
@@ -82,6 +87,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("applies default max restarts when negative", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
@@ -97,6 +103,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestSaveAndLoad(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	tempDir := t.TempDir()
 	command := []string{"echo", "hello"}
 
@@ -123,6 +130,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 func TestList(t *testing.T) {
 	t.Run("returns empty list when no sessions exist", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		metas, err := List(tempDir)
 		if err != nil {
@@ -134,6 +142,7 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("returns sessions sorted by start time", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 
@@ -166,10 +175,37 @@ func TestList(t *testing.T) {
 			t.Errorf("expected second session to be %s, got %s", meta1.ID, metas[1].ID)
 		}
 	})
+
+	t.Run("filters sessions by repo root", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
+		repoOne := t.TempDir()
+		repoTwo := t.TempDir()
+		command := []string{"echo", "hello"}
+
+		meta1, err := New(repoOne, repoOne, "skill-1", "claude", command, 10*time.Second, 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := New(repoTwo, repoTwo, "skill-2", "claude", command, 10*time.Second, 2); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		metas, err := List(repoOne)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(metas) != 1 {
+			t.Fatalf("expected 1 session, got %d", len(metas))
+		}
+		if metas[0].ID != meta1.ID {
+			t.Fatalf("expected session %s, got %s", meta1.ID, metas[0].ID)
+		}
+	})
 }
 
 func TestDeleteByID(t *testing.T) {
 	t.Run("deletes existing session directory", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		command := []string{"echo", "hello"}
 		meta, err := New(tempDir, tempDir, "skill-1", "claude", command, 10*time.Second, 2)
@@ -192,6 +228,7 @@ func TestDeleteByID(t *testing.T) {
 	})
 
 	t.Run("rejects empty session id", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		tempDir := t.TempDir()
 		if err := DeleteByID(tempDir, ""); err == nil {
 			t.Fatal("DeleteByID() should return error for empty id")
@@ -242,6 +279,50 @@ func TestReadExitCode(t *testing.T) {
 			t.Error("expected hasCode to be false for empty file")
 		}
 	})
+}
+
+func TestReconcileKeepsScheduledStatusWhenTmuxSessionExists(t *testing.T) {
+	binDir := t.TempDir()
+	tmuxPath := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(tmuxPath, []byte(`#!/bin/sh
+if [ "$1" = "has-session" ]; then
+  exit 0
+fi
+exit 0
+	`), 0o600); err != nil {
+		t.Fatalf("failed to write fake tmux: %v", err)
+	}
+	//nolint:gosec // Test helper script must be executable to stand in for tmux on PATH.
+	if err := os.Chmod(tmuxPath, 0o755); err != nil {
+		t.Fatalf("failed to write fake tmux: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	tempDir := t.TempDir()
+	now := time.Now().UTC()
+	nextRun := now.Add(time.Hour)
+	meta := &Metadata{
+		ID:           "scheduled-session",
+		RepoRoot:     tempDir,
+		ScriptPath:   filepath.Join(tempDir, "run.sh"),
+		ExitCodePath: filepath.Join(tempDir, "exit.code"),
+		StdoutPath:   filepath.Join(tempDir, "stdout.log"),
+		StderrPath:   filepath.Join(tempDir, "stderr.log"),
+		TmuxSession:  "skill-loop-scheduled-session",
+		Status:       StatusScheduled,
+		StartedAt:    now,
+		LastOutputAt: now,
+		NextRun:      &nextRun,
+		Schedule:     "0 9 * * *",
+	}
+
+	if err := Reconcile(meta); err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+
+	if meta.Status != StatusScheduled {
+		t.Fatalf("status = %s, want %s", meta.Status, StatusScheduled)
+	}
 }
 
 func TestShellQuote(t *testing.T) {

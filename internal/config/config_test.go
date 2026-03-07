@@ -207,6 +207,52 @@ skills:
 	}
 }
 
+func TestLoadValidSchedule(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`schedule: "0 9 * * *"
+default_entrypoint: impl
+skills:
+  impl:
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	cfg, err := Load(cfgFile)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if cfg.Schedule != "0 9 * * *" {
+		t.Errorf("Schedule = %q, want %q", cfg.Schedule, "0 9 * * *")
+	}
+}
+
+func TestLoadInvalidSchedule(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgFile := filepath.Join(tmpDir, "config.yml")
+
+	content := []byte(`schedule: "not-a-cron"
+default_entrypoint: impl
+skills:
+  impl:
+    next:
+      - skill: "<DONE>"
+`)
+	if err := os.WriteFile(cfgFile, content, 0o600); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err := Load(cfgFile)
+	if err == nil {
+		t.Error("Load() should return error for invalid schedule")
+	}
+}
+
 func TestLoadNonexistentFile(t *testing.T) {
 	_, err := Load("/nonexistent/path/config.yml")
 	if err == nil {
