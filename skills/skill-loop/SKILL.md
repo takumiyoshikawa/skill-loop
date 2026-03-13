@@ -13,18 +13,20 @@ Use this skill for two cases:
 ## Modes
 
 - GitHub bootstrap: read `references/github-init.md`
-- YAML authoring or migration: read `references/yaml-authoring.md`
+- YAML authoring or migration: read `references/yaml-authoring.md`, then follow the selected pattern reference only
 
 ## Working style
 
 - Keep the generated setup minimal.
 - Prefer `tracker.repo` plus a small `skills:` graph.
 - Prefer an `issue-check` entrypoint that uses `gh` to choose the next ready issue and complete the minimum setup before planning.
+- Treat YAML authoring as pattern selection first, then concrete authoring.
 - Reuse templates from `assets/` instead of writing large starter files from scratch.
 - Default to `.claude/skills/` for generated starter skills unless the repository already uses another skill directory.
 
 ## Expected outputs
 
 - create or update `skill-loop.yml`
-- create starter skills such as `issue-check`, `plan`, `implement`, and `review`
-- explain the execution flow in terms of `gh` issue discovery, issue setup, planning, implementation, and review
+- select the right workflow pattern before drafting YAML
+- create starter skills only when the selected pattern actually needs them
+- explain the execution flow in terms of the chosen pattern

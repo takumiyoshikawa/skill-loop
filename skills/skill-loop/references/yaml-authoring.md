@@ -2,78 +2,33 @@
 
 Use this reference when writing or revising `skill-loop.yml`.
 
-## Core rules
+This reference is a router, not the final pattern guide. First choose the workflow shape, then read only the matching reference:
+
+1. Habitual scheduled task with no meaningful inner loop
+   - Read `references/yaml-pattern-scheduled.md`
+2. GitHub issue throughput or issue triage loop
+   - Do not hand-author that YAML here
+   - Use `references/github-init.md`
+3. Normal agent loop without GitHub issue management
+   - Read `references/yaml-pattern-loop.md`
+
+## Selection rules
+
+- If the user mainly wants a cron-like recurring check, report, cleanup, or sync job, choose the scheduled pattern.
+- If the user wants to pick up GitHub issues, assign work, branch from issues, or attach plans and review findings to issues, choose the GitHub bootstrap path and use `github-init`.
+- If the user wants repeated implementation, analysis, or review passes but does not need `gh` issue operations, choose the plain loop pattern.
+- If multiple patterns seem possible, prefer the smallest one that satisfies the request.
+
+## Core rules for any pattern
 
 - Keep the top level short.
-- Prefer `tracker.repo` over a large block of ticket metadata.
 - Use a small number of skills with clear router criteria.
-- Treat the `skills` graph as the per-ticket inner loop.
+- Prefer simple routes over large dispatcher logic.
+- Preserve existing names when updating an existing workflow unless the user wants a rename.
+- Keep `default_entrypoint` stable unless the user asks for a new entrypoint.
+- Simplify before adding new top-level config.
 
-## Preferred starter shape
+## Output expectation
 
-```yaml
-name: github-issue-loop
-default_entrypoint: issue-check
-router:
-  runtime: codex
-  model: gpt-5.4
-
-tracker:
-  repo: owner/repo
-
-skills:
-  issue-check:
-    next:
-      - id: start-plan
-        criteria: A ready GitHub issue was selected and the repo is prepared for planning.
-        skill: plan
-      - id: stop
-        criteria: No issue is ready or setup cannot be completed safely.
-        done: true
-
-  plan:
-    next:
-      - id: start-implement
-        criteria: A concrete plan was prepared and attached to the issue.
-        skill: implement
-      - id: stop
-        criteria: The issue is not actionable after planning.
-        done: true
-
-  implement:
-    next:
-      - id: send-review
-        criteria: Implementation is ready for an explicit review pass.
-        skill: review
-      - id: revise-plan
-        criteria: New information means the plan must be updated before implementation can continue safely.
-        skill: plan
-      - id: continue-implement
-        criteria: More implementation work is still required before review.
-        skill: implement
-
-  review:
-    next:
-      - id: approve
-        criteria: Review is satisfied.
-        done: true
-      - id: rework
-        criteria: Review requires more implementation work.
-        skill: implement
-      - id: replan
-        criteria: Review found a scope or approach problem that requires updating the plan first.
-        skill: plan
-```
-
-## Authoring guidelines
-
-- Use route `id`s plus `criteria`; let the router choose instead of embedding status markers in skill output.
-- Prefer one small set of mutually exclusive routes per skill.
-- Avoid over-configuring polling, labels, or workspace settings unless the repository needs them.
-- If the user wants a `ghpm`-style flow, push issue selection and minimum work setup into `issue-check`, make `plan` post the plan to the issue, and make `review` post only important findings back to the issue.
-
-## When updating existing YAML
-
-- preserve the existing skill names when possible
-- keep `default_entrypoint` stable unless the user wants a new entrypoint
-- simplify before adding new top-level config
+- State which pattern was selected and why.
+- Only generate the YAML and starter skills required for that pattern.
