@@ -5,7 +5,7 @@ default_entrypoint: 1-impl
 max_iterations: 5
 router:
   runtime: codex
-  model: gpt-5.3-codex
+  model: gpt-5.4
   args:
     - "--full-auto"
 
@@ -13,7 +13,7 @@ skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-sonnet-4-5
+      model: claude-sonnet-4.6
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -23,7 +23,7 @@ skills:
   2-review:
     agent:
       runtime: codex
-      model: gpt-5.3-codex
+      model: gpt-5.4
       args:
         - "--full-auto"
     next:

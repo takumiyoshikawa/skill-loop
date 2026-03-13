@@ -55,7 +55,7 @@ default_entrypoint: 1-impl
 max_iterations: 10
 router:
   runtime: codex
-  model: gpt-5.3-codex
+  model: gpt-5.4
   args:
     - "--full-auto"
 
@@ -63,7 +63,7 @@ skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4.6
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -73,7 +73,7 @@ skills:
   2-review:
     agent:
       runtime: codex
-      model: gpt-5.3-codex
+      model: gpt-5.4
       args:
         - "--full-auto"
     next:
@@ -114,7 +114,7 @@ skills:
   staleness-check:
     agent:
       runtime: claude
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4.6
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -204,7 +204,7 @@ Each skill runs freely and writes normal stdout. skill-loop sends that stdout to
 | Field     | Type   | Required | Description                                                                              |
 | --------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
 | `runtime` | string | No       | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude`               |
-| `model`   | string | No       | Model to use for the selected agent (for example `claude-sonnet-4-5-20250929`)           |
+| `model`   | string | No       | Model to use for the selected agent (for example `claude-sonnet-4.6`)                     |
 | `args`    | list   | No       | Additional CLI arguments passed to the agent (e.g. `["--dangerously-skip-permissions"]`) |
 
 `args` lets you pass arbitrary flags to the underlying agent CLI. This is useful for skipping permission prompts in automated workflows:
@@ -214,7 +214,7 @@ skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-sonnet-4-5-20250929
+      model: claude-sonnet-4.6
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -226,7 +226,7 @@ skills:
 ```yaml
 router:
   runtime: codex
-  model: gpt-5.3-codex
+  model: gpt-5.4
   args:
     - "--full-auto"
 ```

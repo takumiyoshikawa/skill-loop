@@ -9,7 +9,7 @@ skills:
   hello:
     agent:
       runtime: claude
-      model: claude-sonnet-4-5
+      model: claude-sonnet-4.6
       args:
         - "--dangerously-skip-permissions"
     next:
