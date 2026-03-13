@@ -221,6 +221,16 @@ skills:
       - skill: 2-review
 ```
 
+`router` uses the same `runtime` / `model` / `args` shape as a skill agent, so you can also pass router-specific CLI flags:
+
+```yaml
+router:
+  runtime: codex
+  model: gpt-5.3-codex
+  args:
+    - "--full-auto"
+```
+
 ### Route fields
 
 | Field      | Type   | Required | Description                                                                                              |
