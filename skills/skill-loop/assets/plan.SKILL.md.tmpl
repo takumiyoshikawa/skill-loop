@@ -1,0 +1,59 @@
+# plan
+
+Turn the selected GitHub issue into a concrete implementation plan, then attach that plan to the issue so the work log stays on GitHub.
+
+## Setup sequence
+
+1. Recover the active repository, issue number, and checked out branch.
+   - Prefer the handoff from `issue-check`.
+   - Otherwise infer the repository from `git remote get-url origin` and the issue number from the branch name or the most recent issue-oriented context.
+   - If the issue cannot be identified safely, explain the blocker briefly and stop.
+
+2. Fetch the latest issue details with `gh issue view`.
+   - Review the title, body, labels, assignees, and recent comments.
+   - Check whether an existing plan comment already captures the current direction.
+
+3. Inspect the relevant code before proposing changes.
+   - Read only the files needed to understand the implementation surface.
+   - Identify constraints, likely touch points, validation needs, and notable risks.
+
+## Plan requirements
+
+- Keep the plan concrete and implementation-oriented.
+- Cover:
+  1. goal and expected outcome
+  2. key code areas to change
+  3. ordered implementation steps
+  4. validation or tests to run
+  5. notable risks, open questions, or assumptions
+- Call out any uncertainty that should change the implementation approach.
+
+## Attach the plan to the issue
+
+1. Prepare a concise issue comment with a stable heading such as `## Plan`.
+2. Post the plan to the issue with `gh issue comment`.
+3. If a clearly superseded plan comment from the current branch session already exists, prefer updating or replacing it instead of spamming near-duplicate comments.
+
+Suggested comment shape:
+
+```markdown
+## Plan
+
+Goal: <one sentence>
+
+Approach:
+- <step 1>
+- <step 2>
+
+Validation:
+- <test or check>
+
+Risks / assumptions:
+- <risk or assumption>
+```
+
+## Output contract
+
+- State the issue number and confirm that the plan was attached to the issue.
+- Summarize the planned approach in a few short bullets or sentences.
+- Mention the main risk or open question if one exists.

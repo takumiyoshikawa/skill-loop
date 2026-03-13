@@ -1,0 +1,32 @@
+# implement
+
+Execute the latest accepted plan for the active GitHub issue. Treat the issue thread and the attached plan comment as the source of truth for scope.
+
+## Setup sequence
+
+1. Recover the active repository, issue number, and branch.
+   - Prefer the handoff from `plan` or `review`.
+   - If the issue cannot be identified safely, explain the blocker briefly and stop.
+
+2. Re-read the latest issue details before editing code.
+   - Review the issue body and recent comments, especially the latest `## Plan` comment.
+   - If the plan is missing, stale, or obviously incompatible with the current codebase, route back toward planning instead of guessing.
+
+3. Inspect the working tree before making changes.
+   - Preserve unrelated user changes.
+   - If the tree contains conflicting work that prevents safe implementation, explain that briefly and stop.
+
+## Implementation rules
+
+- Follow repository instructions from local guidance files before making changes.
+- Keep edits scoped to the issue and the current plan.
+- Update the plan mentally as new facts appear, but return to `plan` when the approach materially changes.
+- Run the relevant validation before concluding.
+- Do not claim completion while known failing checks remain unexplained.
+
+## Output contract
+
+- Summarize what changed and which validation ran.
+- Call out any remaining risk, follow-up, or intentionally deferred work.
+- If implementation is ready for review, make that explicit.
+- If the plan needs revision, say so explicitly so routing can return to `plan`.

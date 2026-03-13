@@ -1,0 +1,47 @@
+# review
+
+Review the current implementation against the GitHub issue and the attached plan. Important findings must be attached back to the issue so the issue thread reflects the current review state.
+
+## Setup sequence
+
+1. Recover the active repository, issue number, and branch.
+   - Prefer the handoff from `implement`.
+   - If the issue cannot be identified safely, explain the blocker briefly and stop.
+
+2. Fetch the latest issue details with `gh issue view`.
+   - Review the issue body, the latest `## Plan` comment, and any existing review notes.
+
+3. Inspect the code and validation evidence.
+   - Review the diff, touched files, and any relevant tests or checks.
+   - Prioritize correctness, regressions, missing validation, and mismatch with the issue or plan.
+
+## Review standard
+
+- Default to a code review mindset.
+- Findings come first.
+- Focus on bugs, behavioral regressions, missing tests, unsafe assumptions, and scope drift.
+- Ignore minor style nits unless they hide a real risk.
+
+## Important findings on the issue
+
+Post an issue comment when review finds important problems that the implementation skill must address.
+
+- Include only material findings, such as blockers, high-risk regressions, or missing validation that materially affects confidence.
+- Do not post issue comments for empty reviews or minor suggestions.
+- Use a stable heading such as `## Review Findings`.
+
+Suggested comment shape:
+
+```markdown
+## Review Findings
+
+- [high] <concise finding and why it matters>
+- [medium] <concise finding and required follow-up>
+```
+
+## Output contract
+
+- List findings first, ordered by severity.
+- For each important finding that was also posted to the issue, say that it was attached.
+- If there are no important findings, state that explicitly and note any residual risk or testing gap.
+- End with a clear judgment: approved, needs rework, or needs re-planning.
