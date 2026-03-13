@@ -34,6 +34,10 @@
           "type": "string",
           "description": "Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."
         },
+        "router": {
+          "$ref": "#/$defs/Agent",
+          "description": "Shared router agent configuration used to choose the next route when a skill has multiple next routes."
+        },
         "default_entrypoint": {
           "type": "string",
           "description": "Default skill to start the loop with. Must exist in the skills map."
@@ -67,23 +71,27 @@
     },
     "Route": {
       "properties": {
-        "when": {
+        "id": {
           "type": "string",
-          "description": "Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."
+          "description": "Stable route identifier returned by the router agent."
         },
         "criteria": {
           "type": "string",
-          "description": "Judgment criteria for when this route should be chosen. Included in the agent prompt to guide decision-making."
+          "description": "Judgment criteria used by the router agent when deciding whether this route should be chosen."
         },
         "skill": {
           "type": "string",
-          "description": "Target skill name to route to or \u003cDONE\u003e to terminate the loop."
+          "description": "Target skill name to route to. Mutually exclusive with done."
+        },
+        "done": {
+          "type": "boolean",
+          "description": "Terminate the workflow when this route is selected. Mutually exclusive with skill."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "skill"
+        "id"
       ]
     },
     "Skill": {
@@ -97,7 +105,7 @@
             "$ref": "#/$defs/Route"
           },
           "type": "array",
-          "description": "Routing rules evaluated top-to-bottom. The first matching route is used."
+          "description": "Route options available after this skill runs. If more than one route exists then the shared router agent selects one by id."
         }
       },
       "additionalProperties": false,

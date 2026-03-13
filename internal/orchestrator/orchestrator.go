@@ -13,18 +13,22 @@ const DefaultMaxIterations = 100
 
 // SkillExecutor abstracts skill execution for testability.
 type SkillExecutor interface {
-	ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts executor.ExecutionOptions) (*executor.SkillResult, error)
+	ExecuteSkill(name string, agent config.Agent, input string, opts executor.ExecutionOptions) (*executor.SkillResult, error)
+	RouteSkillOutput(skillName string, router config.Agent, output string, routes []config.Route, opts executor.ExecutionOptions) (*executor.RouterDecision, error)
 }
 
 type RunObserver interface {
 	IterationStarted(iteration int, maxIterations int, skill string)
 }
 
-// defaultExecutor delegates to the real executor package.
 type defaultExecutor struct{}
 
-func (d *defaultExecutor) ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
-	return executor.ExecuteSkill(name, agent, model, extraArgs, prevSummary, routes, opts)
+func (d *defaultExecutor) ExecuteSkill(name string, agent config.Agent, input string, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
+	return executor.ExecuteSkill(name, agent, input, opts)
+}
+
+func (d *defaultExecutor) RouteSkillOutput(skillName string, router config.Agent, output string, routes []config.Route, opts executor.ExecutionOptions) (*executor.RouterDecision, error) {
+	return executor.RouteSkillOutput(skillName, router, output, routes, opts)
 }
 
 func Run(cfg *config.Config, maxIterations int, prompt string, entrypoint string) error {
@@ -60,7 +64,7 @@ func runWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 	}
 
 	currentSkill := entrypoint
-	prevSummary := prompt
+	handoff := strings.TrimSpace(prompt)
 
 	for i := 0; i < maxIterations; i++ {
 		skill, ok := cfg.Skills[currentSkill]
@@ -74,52 +78,77 @@ func runWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 
 		fmt.Printf("==> Running skill: %s (iteration %d)\n", currentSkill, i+1)
 
-		runtime := skill.Agent.Runtime
-		if runtime == "" {
-			runtime = "claude"
+		opts := executor.ExecutionOptions{
+			IdleTimeout: time.Duration(cfg.IdleTimeoutSeconds) * time.Second,
+			MaxRestarts: cfg.EffectiveMaxRestarts(),
 		}
 
-		result, err := exec.ExecuteSkill(
-			currentSkill,
-			runtime,
-			skill.Agent.Model,
-			skill.Agent.Args,
-			prevSummary,
-			skill.Next,
-			executor.ExecutionOptions{
-				IdleTimeout: time.Duration(cfg.IdleTimeoutSeconds) * time.Second,
-				MaxRestarts: cfg.EffectiveMaxRestarts(),
-			},
-		)
+		result, err := exec.ExecuteSkill(currentSkill, skill.Agent, handoff, opts)
 		if err != nil {
 			return fmt.Errorf("skill %q failed: %w", currentSkill, err)
 		}
 
-		fmt.Println(result.Summary)
+		route, reason, err := selectRoute(exec, cfg.Router, currentSkill, skill.Next, result.Stdout, opts)
+		if err != nil {
+			return fmt.Errorf("skill %q routing failed: %w", currentSkill, err)
+		}
 
-		nextSkill := resolveNext(skill.Next, result.Summary)
+		fmt.Printf("==> Router selected: %s", route.ID)
+		if reason != "" {
+			fmt.Printf(" (%s)", reason)
+		}
+		fmt.Println()
 
-		if nextSkill == "<DONE>" {
+		if route.Done {
 			fmt.Println("==> Loop finished.")
 			return nil
 		}
 
-		if _, ok := cfg.Skills[nextSkill]; !ok {
-			return fmt.Errorf("next skill %q (resolved from %q) not found in config", nextSkill, currentSkill)
+		if _, ok := cfg.Skills[route.Skill]; !ok {
+			return fmt.Errorf("next skill %q (resolved from route %q) not found in config", route.Skill, route.ID)
 		}
 
-		prevSummary = result.Summary
-		currentSkill = nextSkill
+		handoff = buildHandoff(currentSkill, route.ID, reason, result.Stdout)
+		currentSkill = route.Skill
 	}
 
 	return fmt.Errorf("max iterations (%d) reached", maxIterations)
 }
 
-func resolveNext(routes []config.Route, summary string) string {
-	for _, r := range routes {
-		if r.When == "" || strings.Contains(summary, r.When) {
-			return r.Skill
+func selectRoute(exec SkillExecutor, router config.Agent, skillName string, routes []config.Route, output string, opts executor.ExecutionOptions) (config.Route, string, error) {
+	if len(routes) == 0 {
+		return config.Route{}, "", fmt.Errorf("no next routes configured")
+	}
+	if len(routes) == 1 {
+		reason := routes[0].Criteria
+		if strings.TrimSpace(reason) == "" {
+			reason = "single available route"
+		}
+		return routes[0], reason, nil
+	}
+
+	decision, err := exec.RouteSkillOutput(skillName, router, output, routes, opts)
+	if err != nil {
+		return config.Route{}, "", err
+	}
+
+	for _, route := range routes {
+		if route.ID == decision.Route {
+			return route, decision.Reason, nil
 		}
 	}
-	return "<DONE>"
+
+	return config.Route{}, "", fmt.Errorf("unknown route %q", decision.Route)
+}
+
+func buildHandoff(previousSkill string, routeID string, reason string, stdout string) string {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Previous skill: %s\n", previousSkill)
+	fmt.Fprintf(&sb, "Selected route: %s\n", routeID)
+	if strings.TrimSpace(reason) != "" {
+		fmt.Fprintf(&sb, "Routing reason: %s\n", reason)
+	}
+	sb.WriteString("\nPrevious skill stdout:\n")
+	sb.WriteString(executor.FormatPromptText(stdout))
+	return sb.String()
 }

@@ -2,7 +2,7 @@
 
 An agentic skill orchestrator for coding-agent CLIs.
 
-Chain multiple coding-agent skills together in a loop-based workflow. Define skills, routing conditions, and iteration limits in a simple YAML config — skill-loop handles the rest.
+Chain multiple coding-agent skills together in a loop-based workflow. Define skills, routing criteria, and iteration limits in a simple YAML config. skill-loop executes each skill, runs a separate LLM router on the skill's stdout, and advances the workflow from that routing decision.
 
 ## How it works
 
@@ -10,17 +10,16 @@ Chain multiple coding-agent skills together in a loop-based workflow. Define ski
           +--------+         +----------+
           | 1-impl | ------> | 2-review |
           +--------+         +----------+
-              ^                 |     |
-              |  (needs fix)    |     |  (REVIEW_OK)
-              +-----------------+     |
-                                      v
-                                   <DONE>
+              ^                 |
+              |                 v
+              +----------- router -----------+
+                         rework / approve
 ```
 
 1. skill-loop reads a YAML config that defines skills and routing rules
 2. Starting from `--entrypoint` (if provided) or `default_entrypoint`, it invokes the configured agent (`claude`, `codex`, or `opencode`) with each skill
-3. Each skill produces a summary; routing rules match substrings in the summary to decide the next skill
-4. The loop continues until a route resolves to `<DONE>` or `max_iterations` is reached
+3. Each skill produces stdout; a separate router agent evaluates that stdout against the configured route `criteria`
+4. The loop continues until the selected route has `done: true` or `max_iterations` is reached
 
 When `schedule` is set, the detached tmux session stays resident and waits for the next cron match instead of running immediately. Each cron tick starts a fresh workflow from the configured entrypoint.
 
@@ -54,6 +53,11 @@ Create a `skill-loop.yml` in your project:
 name: feature-review
 default_entrypoint: 1-impl
 max_iterations: 10
+router:
+  runtime: codex
+  model: gpt-5.3-codex
+  args:
+    - "--full-auto"
 
 skills:
   1-impl:
@@ -63,7 +67,8 @@ skills:
       args:
         - "--dangerously-skip-permissions"
     next:
-      - skill: 2-review
+      - id: send-review
+        skill: 2-review
 
   2-review:
     agent:
@@ -72,10 +77,12 @@ skills:
       args:
         - "--full-auto"
     next:
-      - when: "<REVIEW_OK>"
+      - id: approve
         criteria: "If the review says implementation quality is sufficient."
-        skill: "<DONE>"
-      - skill: 1-impl
+        done: true
+      - id: rework
+        criteria: "If review found issues that require more implementation work."
+        skill: 1-impl
 ```
 
 Define skills as Claude Code custom slash commands under `.claude/skills/`:
@@ -111,7 +118,8 @@ skills:
       args:
         - "--dangerously-skip-permissions"
     next:
-      - skill: "<DONE>"
+      - id: finish
+        done: true
 ```
 
 ## Usage
@@ -175,6 +183,7 @@ skill-loop run --entrypoint 2-review
 | ---------------------- | ------ | -------- | ------------------------------------------------------------------------ |
 | `name`                 | string | No       | Workflow name used for session storage under `~/.local/share/skill-loop/<name>/` |
 | `schedule`             | string | No       | Optional cron schedule in standard 5-field crontab syntax for periodic execution |
+| `router`               | object | Sometimes | Shared router agent settings. Required when any skill has multiple `next` routes. |
 | `default_entrypoint`   | string | Yes      | Default skill name to start with (unless overridden via `--entrypoint`)  |
 | `max_iterations`       | int    | No       | Maximum loop iterations (default: 100)                                   |
 | `idle_timeout_seconds` | int    | No       | Idle timeout for each skill execution before auto-restart (default: 900) |
@@ -187,6 +196,8 @@ skill-loop run --entrypoint 2-review
 | ------- | ------ | -------- | -------------------------------- |
 | `agent` | object | No       | Agent settings for the skill     |
 | `next`  | list   | Yes      | Routing rules evaluated in order |
+
+Each skill runs freely and writes normal stdout. skill-loop sends that stdout to the shared router agent, then passes the previous skill's stdout plus the router's decision reason into the next skill as handoff context.
 
 ### Agent fields
 
@@ -214,11 +225,12 @@ skills:
 
 | Field      | Type   | Required | Description                                                                                              |
 | ---------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| `when`     | string | No       | Substring to match in the skill's summary. If omitted, the route always matches (acts as a default)      |
-| `criteria` | string | No       | Judgment criteria describing when this route should be chosen (included in the agent prompt as guidance) |
-| `skill`    | string | Yes      | Next skill to run, or `<DONE>` to terminate the loop                                                     |
+| `id`       | string | Yes      | Stable route identifier that the router agent returns                                                    |
+| `criteria` | string | Usually  | Judgment criteria used by the router when choosing this route. Required when a skill has multiple routes |
+| `skill`    | string | Conditional | Next skill to run. Required unless `done: true`                                                        |
+| `done`     | bool   | Conditional | Ends the workflow when selected. Required unless `skill` is set                                        |
 
-Routes are evaluated top-to-bottom. The first matching route is selected. A route without `when` acts as a fallback.
+When a skill has exactly one route, skill-loop skips the router and selects that route automatically.
 
 ## Sessions
 

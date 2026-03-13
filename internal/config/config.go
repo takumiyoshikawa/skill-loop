@@ -12,9 +12,11 @@ import (
 )
 
 type Route struct {
-	When     string `yaml:"when,omitempty" jsonschema:"description=Substring to match in the previous skill's summary. If omitted or empty the route always matches (default route)."`
-	Criteria string `yaml:"criteria,omitempty" jsonschema:"description=Judgment criteria for when this route should be chosen. Included in the agent prompt to guide decision-making."`
-	Skill    string `yaml:"skill" jsonschema:"required,description=Target skill name to route to or <DONE> to terminate the loop."`
+	ID         string `yaml:"id" jsonschema:"required,description=Stable route identifier returned by the router agent."`
+	Criteria   string `yaml:"criteria,omitempty" jsonschema:"description=Judgment criteria used by the router agent when deciding whether this route should be chosen."`
+	Skill      string `yaml:"skill,omitempty" jsonschema:"description=Target skill name to route to. Mutually exclusive with done."`
+	Done       bool   `yaml:"done,omitempty" jsonschema:"description=Terminate the workflow when this route is selected. Mutually exclusive with skill."`
+	LegacyWhen string `yaml:"when,omitempty" json:"-" jsonschema:"-"`
 }
 
 type Agent struct {
@@ -25,12 +27,13 @@ type Agent struct {
 
 type Skill struct {
 	Agent Agent   `yaml:"agent,omitempty" jsonschema:"description=Agent configuration for this skill. runtime defaults to claude when omitted."`
-	Next  []Route `yaml:"next" jsonschema:"required,description=Routing rules evaluated top-to-bottom. The first matching route is used."`
+	Next  []Route `yaml:"next" jsonschema:"required,description=Route options available after this skill runs. If more than one route exists then the shared router agent selects one by id."`
 }
 
 type Config struct {
 	Name               string           `yaml:"name,omitempty" jsonschema:"description=Workflow name used for grouping run sessions under ~/.local/share/skill-loop/<name>/. When omitted the config filename is used."`
 	Schedule           string           `yaml:"schedule,omitempty" jsonschema:"description=Optional cron schedule in standard 5-field crontab syntax. When set skill-loop stays resident and runs the workflow on each matching time."`
+	Router             Agent            `yaml:"router,omitempty" jsonschema:"description=Shared router agent configuration used to choose the next route when a skill has multiple next routes."`
 	DefaultEntrypoint  string           `yaml:"default_entrypoint" jsonschema:"required,description=Default skill to start the loop with. Must exist in the skills map."`
 	MaxIterations      int              `yaml:"max_iterations,omitempty" jsonschema:"description=Maximum number of loop iterations before stopping. Defaults to 100 if omitted." default:"100"`
 	IdleTimeoutSeconds int              `yaml:"idle_timeout_seconds,omitempty" jsonschema:"description=Idle timeout in seconds for each skill execution before restart. Defaults to 900 (15 minutes)." default:"900"`
@@ -78,24 +81,60 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	needsRouter := false
 	for name, skill := range cfg.Skills {
-		runtime := skill.Agent.Runtime
-		if runtime == "" {
-			runtime = "claude"
-		}
-		if runtime != "claude" && runtime != "codex" && runtime != "opencode" {
-			return nil, fmt.Errorf("skill %q: unsupported agent runtime %q (supported: claude, codex, opencode)", name, skill.Agent.Runtime)
+		if err := validateAgent("skill "+strconvQuote(name), skill.Agent); err != nil {
+			return nil, err
 		}
 
+		if len(skill.Next) == 0 {
+			return nil, fmt.Errorf("skill %q: at least one next route is required", name)
+		}
+		if len(skill.Next) > 1 {
+			needsRouter = true
+		}
+
+		seenRouteIDs := make(map[string]struct{}, len(skill.Next))
 		for i, route := range skill.Next {
-			if route.Skill == "" {
-				return nil, fmt.Errorf("skill %q: route[%d] has empty skill target", name, i)
+			if route.LegacyWhen != "" {
+				return nil, fmt.Errorf("skill %q: route[%d] uses deprecated when matcher; use id + criteria + router instead", name, i)
 			}
-			if route.Skill != "<DONE>" {
-				if _, ok := cfg.Skills[route.Skill]; !ok {
-					return nil, fmt.Errorf("skill %q: route[%d] references unknown skill %q", name, i, route.Skill)
+			if strings.TrimSpace(route.ID) == "" {
+				return nil, fmt.Errorf("skill %q: route[%d] requires id", name, i)
+			}
+			if _, ok := seenRouteIDs[route.ID]; ok {
+				return nil, fmt.Errorf("skill %q: route[%d] reuses id %q", name, i, route.ID)
+			}
+			seenRouteIDs[route.ID] = struct{}{}
+			if route.Skill == "<DONE>" {
+				return nil, fmt.Errorf("skill %q: route[%d] uses deprecated <DONE>; use done: true instead", name, i)
+			}
+			if len(skill.Next) > 1 && strings.TrimSpace(route.Criteria) == "" {
+				return nil, fmt.Errorf("skill %q: route[%d] requires criteria when multiple routes are present", name, i)
+			}
+			if route.Done {
+				if route.Skill != "" {
+					return nil, fmt.Errorf("skill %q: route[%d] cannot set both done and skill", name, i)
 				}
+				continue
 			}
+			if route.Skill == "" {
+				return nil, fmt.Errorf("skill %q: route[%d] must set either skill or done", name, i)
+			}
+			if _, ok := cfg.Skills[route.Skill]; !ok {
+				return nil, fmt.Errorf("skill %q: route[%d] references unknown skill %q", name, i, route.Skill)
+			}
+		}
+	}
+
+	if needsRouter {
+		if isZeroAgent(cfg.Router) {
+			return nil, fmt.Errorf("router is required when any skill defines multiple next routes")
+		}
+	}
+	if !isZeroAgent(cfg.Router) {
+		if err := validateAgent("router", cfg.Router); err != nil {
+			return nil, err
 		}
 	}
 
@@ -159,4 +198,23 @@ func sanitizeName(input string) string {
 		return "default"
 	}
 	return name
+}
+
+func validateAgent(label string, agent Agent) error {
+	runtime := agent.Runtime
+	if runtime == "" {
+		runtime = "claude"
+	}
+	if runtime != "claude" && runtime != "codex" && runtime != "opencode" {
+		return fmt.Errorf("%s: unsupported agent runtime %q (supported: claude, codex, opencode)", label, agent.Runtime)
+	}
+	return nil
+}
+
+func isZeroAgent(agent Agent) bool {
+	return agent.Runtime == "" && agent.Model == "" && len(agent.Args) == 0
+}
+
+func strconvQuote(value string) string {
+	return fmt.Sprintf("%q", value)
 }
