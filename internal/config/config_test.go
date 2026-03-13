@@ -15,12 +15,12 @@ func TestLoadValidConfig(t *testing.T) {
 default_entrypoint: impl
 router:
   runtime: codex
-  model: gpt-5
+  model: gpt-5.4
 skills:
   impl:
     agent:
       runtime: claude
-      model: sonnet
+      model: claude-sonnet-4.6
     next:
       - id: keep-implementing
         criteria: "まだ作業が必要な場合"
@@ -55,8 +55,8 @@ skills:
 	if cfg.Router.Runtime != "codex" {
 		t.Errorf("Router.Runtime = %q, want %q", cfg.Router.Runtime, "codex")
 	}
-	if cfg.Skills["impl"].Agent.Model != "sonnet" {
-		t.Errorf("Skills[impl].Agent.Model = %q, want %q", cfg.Skills["impl"].Agent.Model, "sonnet")
+	if cfg.Skills["impl"].Agent.Model != "claude-sonnet-4.6" {
+		t.Errorf("Skills[impl].Agent.Model = %q, want %q", cfg.Skills["impl"].Agent.Model, "claude-sonnet-4.6")
 	}
 	if cfg.IdleTimeoutSeconds != 900 {
 		t.Errorf("IdleTimeoutSeconds = %d, want 900", cfg.IdleTimeoutSeconds)

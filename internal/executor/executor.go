@@ -111,7 +111,7 @@ func buildSkillPrompt(name string, input string) string {
 	var sb strings.Builder
 	sb.WriteString("/")
 	sb.WriteString(name)
-	sb.WriteString("\n\nDo not output your reasoning in stdout.\n")
+	sb.WriteString("\n")
 	if strings.TrimSpace(input) != "" {
 		sb.WriteString("\nContext from skill-loop:\n")
 		sb.WriteString(FormatPromptText(input))

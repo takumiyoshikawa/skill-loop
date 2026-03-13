@@ -90,7 +90,7 @@ func TestRunSingleSkillDone(t *testing.T) {
 func TestRunSkillChainWithRouter(t *testing.T) {
 	cfg := &config.Config{
 		DefaultEntrypoint: "impl",
-		Router:            config.Agent{Runtime: "codex", Model: "gpt-5"},
+		Router:            config.Agent{Runtime: "codex", Model: "gpt-5.4"},
 		Skills: map[string]config.Skill{
 			"impl": {
 				Next: []config.Route{{ID: "review", Skill: "review"}},
