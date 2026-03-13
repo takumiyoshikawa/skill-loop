@@ -1,0 +1,52 @@
+name: github-issue-loop
+default_entrypoint: issue-check
+max_iterations: 10
+router:
+  runtime: codex
+  model: gpt-5.4
+
+tracker:
+  repo: owner/repo
+
+skills:
+  issue-check:
+    next:
+      - id: start-plan
+        criteria: "A ready GitHub issue was selected with gh, assigned or resumed safely, and the repository is prepared for planning."
+        skill: plan
+      - id: stop
+        criteria: "No ready issue is available or setup cannot be completed safely."
+        done: true
+
+  plan:
+    next:
+      - id: start-implement
+        criteria: "A concrete plan was prepared, attached to the issue, and the repository is ready for implementation."
+        skill: implement
+      - id: stop
+        criteria: "The issue is not actionable after planning or cannot be planned safely."
+        done: true
+
+  implement:
+    next:
+      - id: send-review
+        criteria: "Implementation is ready for an explicit review pass."
+        skill: review
+      - id: revise-plan
+        criteria: "New information means the plan must be updated before implementation can continue safely."
+        skill: plan
+      - id: continue-implement
+        criteria: "More implementation work is still required."
+        skill: implement
+
+  review:
+    next:
+      - id: approve
+        criteria: "Review is satisfied."
+        done: true
+      - id: rework
+        criteria: "Review requires more implementation work."
+        skill: implement
+      - id: replan
+        criteria: "Review found a scope or approach problem that requires updating the issue plan first."
+        skill: plan

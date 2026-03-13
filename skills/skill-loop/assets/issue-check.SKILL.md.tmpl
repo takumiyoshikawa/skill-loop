@@ -1,0 +1,54 @@
+# issue-check
+
+Use `gh` as the source of truth for GitHub issues, choose the single best issue to work on, and complete the minimum setup so the next skill can start planning immediately.
+
+## Setup sequence
+
+1. Identify the target repository.
+   - Prefer `tracker.repo` from the current workflow config when it is available.
+   - Otherwise infer the repository from `git remote get-url origin`.
+   - If the repository is ambiguous, explain the blocker briefly and stop.
+
+2. Verify GitHub CLI access before doing any other work.
+   - Confirm `gh` is installed.
+   - Run `gh auth status`.
+   - Confirm `gh issue list -R <repo>` works for the target repository.
+   - If any of these checks fail, give the shortest useful remediation note and stop.
+
+3. Inspect the local git state.
+   - If there is an obvious in-progress branch for a single issue, prefer resuming that issue instead of selecting a new one.
+   - If the worktree has unrelated uncommitted changes and there is no clear resume path, do not start a new issue. State that briefly and stop.
+
+4. List candidate issues with `gh issue list -R <repo> --state open`.
+   - Gather enough metadata to judge readiness and priority, using `--json` fields when helpful.
+   - If the list is empty, say that no issue is ready and stop.
+
+## Selection rules
+
+- Treat an issue as not ready when it is blocked, waiting on feedback, already owned by someone else, or missing the context needed to start safely.
+- Prefer issues already assigned to you when they are still actionable.
+- Otherwise prioritize by:
+  1. explicit priority labels
+  2. unblock value or user impact
+  3. age as the final tiebreaker
+- Select exactly one issue only when there is a clear best candidate.
+
+## Setup for the chosen issue
+
+1. Fetch full issue details with `gh issue view`.
+2. Determine your GitHub login with `gh api user --jq '.login'`.
+3. If the issue is unassigned, assign it to yourself with `gh issue edit --add-assignee <login>`.
+   - If it is already assigned to someone else and not to you, treat it as not ready.
+4. Prepare a branch for the issue.
+   - If a local branch for the issue already exists, check it out and resume.
+   - Otherwise create a new branch using a predictable name such as `<type>/<issue-number>/<slug>`.
+   - Infer `<type>` from labels or title: bug -> `fix`, feature/enhancement -> `feat`, docs -> `docs`, test -> `test`, refactor -> `refactor`, fallback -> `chore`.
+5. Leave the repository ready for the planning skill to continue from the checked out branch.
+
+## Output contract
+
+- Include the chosen issue number and title.
+- Briefly state why it is ready now, why it won over the other candidates, and which branch is checked out.
+- Make the handoff explicit for `plan`, including the issue number, repository, and branch when known.
+- Keep the output short and decision-oriented.
+- Do not emit special status markers. Write normal prose only; skill-loop will route separately.
