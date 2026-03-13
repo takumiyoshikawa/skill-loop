@@ -3,6 +3,11 @@
 name: e2e-skill-loop
 default_entrypoint: 1-impl
 max_iterations: 5
+router:
+  runtime: codex
+  model: gpt-5.3-codex
+  args:
+    - "--full-auto"
 
 skills:
   1-impl:
@@ -12,7 +17,8 @@ skills:
       args:
         - "--dangerously-skip-permissions"
     next:
-      - skill: 2-review
+      - id: send-review
+        skill: 2-review
 
   2-review:
     agent:
@@ -21,7 +27,9 @@ skills:
       args:
         - "--full-auto"
     next:
-      - when: "<REVIEW_OK>"
+      - id: approve
         criteria: "If the review skill indicates that the implementation is complete."
-        skill: "<DONE>"
-      - skill: 1-impl
+        done: true
+      - id: rework
+        criteria: "If the review skill found issues that require more implementation work."
+        skill: 1-impl

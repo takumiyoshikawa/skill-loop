@@ -13,4 +13,5 @@ skills:
       args:
         - "--dangerously-skip-permissions"
     next:
-      - skill: "<DONE>"
+      - id: finish
+        done: true

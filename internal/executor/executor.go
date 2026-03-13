@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,12 +16,19 @@ import (
 )
 
 const (
-	defaultIdleTimeout = 900 * time.Second
-	defaultMaxRestarts = 2
+	defaultIdleTimeout   = 900 * time.Second
+	defaultMaxRestarts   = 2
+	promptTextCharLimit  = 12000
+	routerRepairAttempts = 1
 )
 
 type SkillResult struct {
-	Summary string
+	Stdout string
+}
+
+type RouterDecision struct {
+	Route  string `json:"route"`
+	Reason string `json:"reason"`
 }
 
 type ExecutionOptions struct {
@@ -28,30 +36,20 @@ type ExecutionOptions struct {
 	MaxRestarts int
 }
 
-func ExecuteSkill(name string, agent string, model string, extraArgs []string, prevSummary string, routes []config.Route, opts ExecutionOptions) (*SkillResult, error) {
-	if agent == "" {
-		agent = "claude"
-	}
-
+func ExecuteSkill(name string, agent config.Agent, input string, opts ExecutionOptions) (*SkillResult, error) {
 	opts = normalizeOptions(opts)
 
-	fullPrompt := "/" + name + "\n"
-	fullPrompt += "\nDo not output your reasoning in stdout.\n"
-	if prevSummary != "" {
-		fullPrompt += "\nPrevious skill output:\n" + prevSummary + "\n"
-	}
-	fullPrompt += buildRouteInstruction(routes)
-
-	binary, args, err := buildCommand(agent, model, extraArgs, fullPrompt)
+	prompt := buildSkillPrompt(name, input)
+	binary, args, err := buildCommand(normalizeAgentRuntime(agent.Runtime), agent.Model, agent.Args, prompt)
 	if err != nil {
 		return nil, err
 	}
 
 	attempt := 0
 	for {
-		result, err := executeSkillOnce(agent, binary, args, opts.IdleTimeout)
+		output, err := executeCommand(normalizeAgentRuntime(agent.Runtime), binary, args, opts.IdleTimeout, true)
 		if err == nil {
-			return result, nil
+			return parseSkillOutput(output)
 		}
 
 		var idleErr *idleTimeoutError
@@ -65,37 +63,95 @@ func ExecuteSkill(name string, agent string, model string, extraArgs []string, p
 	}
 }
 
-func buildRouteInstruction(routes []config.Route) string {
-	// Check if any route has routing criteria defined (when or criteria field)
-	hasCriteria := false
-	for _, r := range routes {
-		if r.When != "" || r.Criteria != "" {
-			hasCriteria = true
-			break
+func RouteSkillOutput(skillName string, router config.Agent, output string, routes []config.Route, opts ExecutionOptions) (*RouterDecision, error) {
+	opts = normalizeOptions(opts)
+	runtime := normalizeAgentRuntime(router.Runtime)
+	prompt := buildRouterPrompt(skillName, output, routes)
+
+	for repair := 0; repair <= routerRepairAttempts; repair++ {
+		binary, args, err := buildCommand(runtime, router.Model, router.Args, prompt)
+		if err != nil {
+			return nil, err
 		}
+
+		raw, err := executeCommand(runtime, binary, args, opts.IdleTimeout, false)
+		if err != nil {
+			return nil, err
+		}
+
+		decision, err := parseRouterOutput(raw, routes)
+		if err == nil {
+			return decision, nil
+		}
+		if repair == routerRepairAttempts {
+			return nil, fmt.Errorf("router output invalid: %w", err)
+		}
+
+		prompt = buildRouterRepairPrompt(skillName, output, routes, string(raw), err)
 	}
 
-	if !hasCriteria {
-		return ""
+	return nil, fmt.Errorf("router output invalid")
+}
+
+func FormatPromptText(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "(empty)"
 	}
 
+	runes := []rune(trimmed)
+	if len(runes) <= promptTextCharLimit {
+		return trimmed
+	}
+
+	return fmt.Sprintf("[truncated to last %d of %d characters]\n%s", promptTextCharLimit, len(runes), string(runes[len(runes)-promptTextCharLimit:]))
+}
+
+func buildSkillPrompt(name string, input string) string {
 	var sb strings.Builder
-	sb.WriteString("\nStart your output with the appropriate status marker on the first line, then provide your detailed response:")
-
-	for _, r := range routes {
-		if r.When != "" {
-			if r.Criteria != "" {
-				fmt.Fprintf(&sb, "\n- %q: %s", r.When, r.Criteria)
-			} else {
-				fmt.Fprintf(&sb, "\n- %q", r.When)
-			}
-		} else {
-			if r.Criteria != "" {
-				fmt.Fprintf(&sb, "\n- Otherwise: %s", r.Criteria)
-			}
-		}
+	sb.WriteString("/")
+	sb.WriteString(name)
+	sb.WriteString("\n\nDo not output your reasoning in stdout.\n")
+	if strings.TrimSpace(input) != "" {
+		sb.WriteString("\nContext from skill-loop:\n")
+		sb.WriteString(FormatPromptText(input))
+		sb.WriteString("\n")
 	}
+	return sb.String()
+}
 
+func buildRouterPrompt(skillName string, output string, routes []config.Route) string {
+	var sb strings.Builder
+	sb.WriteString("You are the router for skill-loop.\n")
+	sb.WriteString("Choose exactly one route based on the skill output and the route criteria.\n")
+	sb.WriteString("Respond with exactly one JSON object and nothing else.\n")
+	sb.WriteString("Do not use markdown fences.\n")
+	sb.WriteString(`JSON shape: {"route":"<route-id>","reason":"<short reason>"}` + "\n\n")
+	fmt.Fprintf(&sb, "Current skill: %s\n\n", skillName)
+	sb.WriteString("Available routes:\n")
+	for _, route := range routes {
+		fmt.Fprintf(&sb, "- %s: %s", route.ID, route.Criteria)
+		if route.Done {
+			sb.WriteString(" (done)")
+		} else {
+			fmt.Fprintf(&sb, " (next skill: %s)", route.Skill)
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("\nSkill stdout:\n")
+	sb.WriteString(FormatPromptText(output))
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+func buildRouterRepairPrompt(skillName string, output string, routes []config.Route, invalidOutput string, parseErr error) string {
+	var sb strings.Builder
+	sb.WriteString(buildRouterPrompt(skillName, output, routes))
+	sb.WriteString("\nYour previous response was invalid.\n")
+	fmt.Fprintf(&sb, "Validation error: %s\n", parseErr)
+	sb.WriteString("Previous invalid response:\n")
+	sb.WriteString(FormatPromptText(invalidOutput))
+	sb.WriteString("\nReturn only valid JSON now.\n")
 	return sb.String()
 }
 
@@ -127,26 +183,47 @@ func buildCommand(agent string, model string, extraArgs []string, prompt string)
 	}
 }
 
-func parseOutput(output []byte) (*SkillResult, error) {
-	return extractResult(string(output))
-}
-
-func extractResult(text string) (*SkillResult, error) {
-	trimmed := strings.TrimSpace(text)
+func parseSkillOutput(output []byte) (*SkillResult, error) {
+	trimmed := strings.TrimSpace(string(output))
 	if trimmed == "" {
 		return nil, fmt.Errorf("no output from agent")
 	}
-	return &SkillResult{Summary: trimmed}, nil
+	return &SkillResult{Stdout: trimmed}, nil
 }
 
-func executeSkillOnce(agent string, binary string, args []string, idleTimeout time.Duration) (*SkillResult, error) {
+func parseRouterOutput(output []byte, routes []config.Route) (*RouterDecision, error) {
+	var decision RouterDecision
+	if err := json.Unmarshal(output, &decision); err != nil {
+		return nil, fmt.Errorf("parse router json: %w", err)
+	}
+	decision.Route = strings.TrimSpace(decision.Route)
+	decision.Reason = strings.TrimSpace(decision.Reason)
+	if decision.Route == "" {
+		return nil, fmt.Errorf("route is required")
+	}
+	if decision.Reason == "" {
+		return nil, fmt.Errorf("reason is required")
+	}
+	for _, route := range routes {
+		if route.ID == decision.Route {
+			return &decision, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown route %q", decision.Route)
+}
+
+func executeCommand(agent string, binary string, args []string, idleTimeout time.Duration, streamStdout bool) ([]byte, error) {
 	cmd := exec.Command(binary, args...)
 
 	var stdoutBuf bytes.Buffer
 	var stderrBuf bytes.Buffer
 
 	lastActivity := &activityClock{last: time.Now()}
-	cmd.Stdout = io.MultiWriter(os.Stdout, &stdoutBuf, lastActivity)
+	stdoutWriter := io.MultiWriter(&stdoutBuf, lastActivity)
+	if streamStdout {
+		stdoutWriter = io.MultiWriter(os.Stdout, &stdoutBuf, lastActivity)
+	}
+	cmd.Stdout = stdoutWriter
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf, lastActivity)
 
 	if err := cmd.Start(); err != nil {
@@ -173,7 +250,7 @@ func executeSkillOnce(agent string, binary string, args []string, idleTimeout ti
 				}
 				return nil, fmt.Errorf("%s command failed: %w", agent, err)
 			}
-			return parseOutput(stdoutBuf.Bytes())
+			return stdoutBuf.Bytes(), nil
 		case <-ticker.C:
 			if idleTimeout > 0 && time.Since(lastActivity.Get()) > idleTimeout {
 				_ = cmd.Process.Kill()
@@ -192,6 +269,13 @@ func normalizeOptions(opts ExecutionOptions) ExecutionOptions {
 		opts.MaxRestarts = defaultMaxRestarts
 	}
 	return opts
+}
+
+func normalizeAgentRuntime(runtime string) string {
+	if runtime == "" {
+		return "claude"
+	}
+	return runtime
 }
 
 type idleTimeoutError struct {
@@ -220,9 +304,10 @@ func (a *activityClock) Get() time.Time {
 	return a.last
 }
 
-func tailString(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return strings.TrimSpace(s)
+func tailString(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
 	}
-	return strings.TrimSpace(s[len(s)-maxBytes:])
+	return string(runes[len(runes)-max:])
 }

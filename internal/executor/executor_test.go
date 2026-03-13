@@ -2,147 +2,120 @@ package executor
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/takumiyoshikawa/skill-loop/internal/config"
 )
 
-func TestExtractResultFullOutput(t *testing.T) {
-	text := "<REVIEW_NG>\nHere is my analysis of the code.\nI found several issues."
-
-	result, err := extractResult(text)
+func TestParseSkillOutputFullOutput(t *testing.T) {
+	result, err := parseSkillOutput([]byte("Implemented feature.\nAdded tests.\n"))
 	if err != nil {
-		t.Fatalf("extractResult() error: %v", err)
+		t.Fatalf("parseSkillOutput() error: %v", err)
 	}
 
-	want := "<REVIEW_NG>\nHere is my analysis of the code.\nI found several issues."
-	if result.Summary != want {
-		t.Errorf("Summary = %q, want %q", result.Summary, want)
+	want := "Implemented feature.\nAdded tests."
+	if result.Stdout != want {
+		t.Errorf("Stdout = %q, want %q", result.Stdout, want)
 	}
 }
 
-func TestExtractResultTrimsWhitespace(t *testing.T) {
-	text := "  \n<REVIEW_OK>\nAll good.\n  \n"
-
-	result, err := extractResult(text)
-	if err != nil {
-		t.Fatalf("extractResult() error: %v", err)
-	}
-
-	want := "<REVIEW_OK>\nAll good."
-	if result.Summary != want {
-		t.Errorf("Summary = %q, want %q", result.Summary, want)
-	}
-}
-
-func TestExtractResultEmptyInput(t *testing.T) {
-	_, err := extractResult("")
+func TestParseSkillOutputEmptyInput(t *testing.T) {
+	_, err := parseSkillOutput([]byte(" \n\t "))
 	if err == nil {
-		t.Error("extractResult() should return error for empty input")
+		t.Error("parseSkillOutput() should return error for whitespace-only input")
 	}
 }
 
-func TestExtractResultWhitespaceOnly(t *testing.T) {
-	_, err := extractResult("   \n  \n  ")
-	if err == nil {
-		t.Error("extractResult() should return error for whitespace-only input")
+func TestParseRouterOutput(t *testing.T) {
+	routes := []config.Route{
+		{ID: "approve", Done: true},
+		{ID: "rework", Skill: "impl"},
 	}
-}
 
-func TestParseOutput(t *testing.T) {
-	output := []byte("<REVIEW_OK>\nsome output\n")
-
-	res, err := parseOutput(output)
+	got, err := parseRouterOutput([]byte(`{"route":"approve","reason":"Looks good"}`), routes)
 	if err != nil {
-		t.Fatalf("parseOutput() error: %v", err)
+		t.Fatalf("parseRouterOutput() error: %v", err)
 	}
 
-	want := "<REVIEW_OK>\nsome output"
-	if res.Summary != want {
-		t.Fatalf("Summary = %q, want %q", res.Summary, want)
+	want := &RouterDecision{Route: "approve", Reason: "Looks good"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("decision = %#v, want %#v", got, want)
 	}
 }
 
-func TestBuildRouteInstruction(t *testing.T) {
-	tests := []struct {
-		name   string
-		routes []config.Route
-		want   string
-	}{
-		{
-			name:   "no routes",
-			routes: nil,
-			want:   "",
-		},
-		{
-			name: "unconditional route without criteria",
-			routes: []config.Route{
-				{Skill: "2-review"},
-			},
-			want: "",
-		},
-		{
-			name: "conditional routes with criteria",
-			routes: []config.Route{
-				{When: "<CONTINUE>", Criteria: "まだ作業が必要な場合", Skill: "1-impl"},
-				{When: "<IMPL_DONE>", Criteria: "テストが全部通って実装が完了した場合", Skill: "2-review"},
-			},
-			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
-				"\n- \"<CONTINUE>\": まだ作業が必要な場合" +
-				"\n- \"<IMPL_DONE>\": テストが全部通って実装が完了した場合",
-		},
-		{
-			name: "conditional with default fallback",
-			routes: []config.Route{
-				{When: "<REVIEW_OK>", Criteria: "品質基準を満たしている場合", Skill: "<DONE>"},
-				{Criteria: "改善が必要な場合", Skill: "1-impl"},
-			},
-			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
-				"\n- \"<REVIEW_OK>\": 品質基準を満たしている場合" +
-				"\n- Otherwise: 改善が必要な場合",
-		},
-		{
-			name: "multiple conditional routes",
-			routes: []config.Route{
-				{When: "<REVIEW_OK>", Criteria: "品質OK", Skill: "deploy"},
-				{When: "<NEEDS_TEST>", Criteria: "テスト不足", Skill: "test"},
-				{Criteria: "その他の改善が必要", Skill: "1-impl"},
-			},
-			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
-				"\n- \"<REVIEW_OK>\": 品質OK" +
-				"\n- \"<NEEDS_TEST>\": テスト不足" +
-				"\n- Otherwise: その他の改善が必要",
-		},
-		{
-			name: "when without criteria",
-			routes: []config.Route{
-				{When: "<DONE>", Skill: "finish"},
-				{Skill: "continue"},
-			},
-			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
-				"\n- \"<DONE>\"",
-		},
-		{
-			name: "mixed routes with and without criteria",
-			routes: []config.Route{
-				{When: "<REVIEW_OK>", Criteria: "If review passed", Skill: "<DONE>"},
-				{When: "<NEEDS_FIX>", Skill: "1-impl"},
-				{Criteria: "Otherwise continue", Skill: "2-review"},
-			},
-			want: "\nStart your output with the appropriate status marker on the first line, then provide your detailed response:" +
-				"\n- \"<REVIEW_OK>\": If review passed" +
-				"\n- \"<NEEDS_FIX>\"" +
-				"\n- Otherwise: Otherwise continue",
-		},
+func TestParseRouterOutputRejectsUnknownRoute(t *testing.T) {
+	_, err := parseRouterOutput([]byte(`{"route":"missing","reason":"oops"}`), []config.Route{{ID: "approve", Done: true}})
+	if err == nil {
+		t.Fatal("parseRouterOutput() expected error for unknown route")
+	}
+}
+
+func TestParseRouterOutputRejectsMissingReason(t *testing.T) {
+	_, err := parseRouterOutput([]byte(`{"route":"approve","reason":"   "}`), []config.Route{{ID: "approve", Done: true}})
+	if err == nil {
+		t.Fatal("parseRouterOutput() expected error for empty reason")
+	}
+}
+
+func TestBuildSkillPrompt(t *testing.T) {
+	got := buildSkillPrompt("review", "Previous skill: impl\nRouting reason: tests failed")
+	if !strings.Contains(got, "/review") {
+		t.Fatalf("buildSkillPrompt() missing skill invocation: %q", got)
+	}
+	if !strings.Contains(got, "Context from skill-loop:") {
+		t.Fatalf("buildSkillPrompt() missing context header: %q", got)
+	}
+	if !strings.Contains(got, "Routing reason: tests failed") {
+		t.Fatalf("buildSkillPrompt() missing handoff details: %q", got)
+	}
+}
+
+func TestBuildRouterPrompt(t *testing.T) {
+	routes := []config.Route{
+		{ID: "approve", Criteria: "ship it", Done: true},
+		{ID: "rework", Criteria: "needs changes", Skill: "impl"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := buildRouteInstruction(tt.routes)
-			if got != tt.want {
-				t.Errorf("buildRouteInstruction() =\n%q\nwant:\n%q", got, tt.want)
-			}
-		})
+	got := buildRouterPrompt("review", "There is one blocking issue.", routes)
+	if !strings.Contains(got, `JSON shape: {"route":"<route-id>","reason":"<short reason>"}`) {
+		t.Fatalf("buildRouterPrompt() missing json contract: %q", got)
+	}
+	if !strings.Contains(got, "- approve: ship it (done)") {
+		t.Fatalf("buildRouterPrompt() missing done route: %q", got)
+	}
+	if !strings.Contains(got, "- rework: needs changes (next skill: impl)") {
+		t.Fatalf("buildRouterPrompt() missing skill route: %q", got)
+	}
+	if !strings.Contains(got, "Skill stdout:\nThere is one blocking issue.") {
+		t.Fatalf("buildRouterPrompt() missing skill stdout: %q", got)
+	}
+}
+
+func TestBuildRouterRepairPrompt(t *testing.T) {
+	got := buildRouterRepairPrompt(
+		"review",
+		"needs more work",
+		[]config.Route{{ID: "rework", Criteria: "needs changes", Skill: "impl"}},
+		"approve",
+		assertErr("not json"),
+	)
+	if !strings.Contains(got, "Your previous response was invalid.") {
+		t.Fatalf("buildRouterRepairPrompt() missing repair note: %q", got)
+	}
+	if !strings.Contains(got, "Previous invalid response:\napprove") {
+		t.Fatalf("buildRouterRepairPrompt() missing invalid response: %q", got)
+	}
+}
+
+func TestFormatPromptTextTruncatesFromTail(t *testing.T) {
+	input := strings.Repeat("a", promptTextCharLimit+20)
+	got := FormatPromptText(input)
+	if !strings.Contains(got, "[truncated to last") {
+		t.Fatalf("FormatPromptText() should indicate truncation: %q", got)
+	}
+	if !strings.HasSuffix(got, strings.Repeat("a", promptTextCharLimit)) {
+		t.Fatal("FormatPromptText() should keep the tail of the text")
 	}
 }
 
@@ -221,4 +194,12 @@ func TestBuildCommand(t *testing.T) {
 			}
 		})
 	}
+}
+
+type staticErr string
+
+func (e staticErr) Error() string { return string(e) }
+
+func assertErr(message string) error {
+	return staticErr(message)
 }
