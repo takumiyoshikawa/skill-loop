@@ -76,6 +76,14 @@ skill-loop run
 `skill-loop run` starts in background by default and prints a `run_id`.
 Use `skill-loop run --attach` to start detached and immediately attach to its tmux session.
 
+**5. Monitor sessions:**
+
+```bash
+skill-loop sessions show
+```
+
+Opens the embedded React dashboard in your browser to view and manage all sessions for the current repository.
+
 ---
 
 A typical `skill-loop.yml` looks like this:
