@@ -47,23 +47,52 @@ And `tmux` must be installed (skill execution is tmux-backed).
 
 ## Quick start
 
-Create a `skill-loop.yml` in your project:
+**1. Install skill-loop** (see [Installation](#installation) below)
+
+**2. Add the `skill-loop` skill to your coding agent:**
+
+```bash
+npx skills add takumiyoshikawa/skill-loop
+```
+
+This installs the `skill-loop` slash command into your coding agent (Claude Code, Codex, OpenCode, etc.), which helps you create and edit `skill-loop.yml` and starter skill files.
+
+**3. Ask your agent to scaffold your workflow:**
+
+Open your coding agent in the project and run:
+
+```
+/skill-loop
+```
+
+The agent will help you write a `skill-loop.yml` and the corresponding skill files under `.agents/skills/`.
+
+**4. Run:**
+
+```bash
+skill-loop run
+```
+
+`skill-loop run` starts in background by default and prints a `run_id`.
+Use `skill-loop run --attach` to start detached and immediately attach to its tmux session.
+
+---
+
+A typical `skill-loop.yml` looks like this:
 
 ```yaml
 name: feature-review
 default_entrypoint: 1-impl
 max_iterations: 10
 router:
-  runtime: codex
-  model: gpt-5.4
-  args:
-    - "--full-auto"
+  runtime: claude
+  model: claude-sonnet-4-6
 
 skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-sonnet-4.6
+      model: claude-sonnet-4-6
       args:
         - "--dangerously-skip-permissions"
     next:
@@ -89,22 +118,13 @@ skills:
         skill: 1-impl
 ```
 
-Define skills as Claude Code custom slash commands under `.claude/skills/`:
+Skills are coding-agent slash commands under `.agents/skills`:
 
 ```
-.claude/skills/
+.agents/skills/
   1-impl/SKILL.md
   2-review/SKILL.md
 ```
-
-Run:
-
-```bash
-skill-loop run
-```
-
-`skill-loop run` starts in background by default and prints a `run_id`.
-Use `skill-loop run --attach` to start detached and immediately attach to its tmux session.
 
 For periodic execution, add `schedule` with standard 5-field cron syntax:
 
