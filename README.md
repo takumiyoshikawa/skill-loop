@@ -80,6 +80,10 @@ skills:
       - id: approve
         criteria: "If the review says implementation quality is sufficient."
         done: true
+      - id: ask-human
+        criteria: "If the review needs a human decision before implementation can continue."
+        blocked: true
+        skill: 1-impl
       - id: rework
         criteria: "If review found issues that require more implementation work."
         skill: 1-impl
@@ -238,9 +242,35 @@ router:
 | `id`       | string | Yes      | Stable route identifier that the router agent returns                                                    |
 | `criteria` | string | Usually  | Judgment criteria used by the router when choosing this route. Required when a skill has multiple routes |
 | `skill`    | string | Conditional | Next skill to run. Required unless `done: true`                                                        |
-| `done`     | bool   | Conditional | Ends the workflow when selected. Required unless `skill` is set                                        |
+| `done`     | bool   | Conditional | Ends the workflow when selected. Mutually exclusive with `skill` and `blocked`                         |
+| `blocked`  | bool   | No       | Pause the workflow and mark the session `blocked` awaiting human input. Requires `skill`                |
 
 When a skill has exactly one route, skill-loop skips the router and selects that route automatically.
+
+### Human in the loop
+
+Use `blocked: true` when the workflow should stop and wait for a person:
+
+```yaml
+skills:
+  review:
+    next:
+      - id: approve
+        criteria: "Ready to ship"
+        done: true
+      - id: ask-human
+        criteria: "A human needs to choose the direction before continuing"
+        blocked: true
+        skill: implement
+```
+
+When that route is selected, the session moves to `blocked` and stores the next skill plus the handoff context. Resume it later with:
+
+```bash
+skill-loop sessions resume <session-id> --prompt "Use option 2 and keep the existing API shape."
+```
+
+The resume prompt is appended to the saved handoff before the workflow continues from the blocked route's `skill`.
 
 ## Sessions
 
@@ -265,6 +295,7 @@ skill-loop sessions logs <session-id> --stderr
 skill-loop sessions logs <session-id> --tail 200
 skill-loop sessions attach <session-id>
 skill-loop sessions stop <session-id>
+skill-loop sessions resume <session-id> --prompt "Reviewed. Continue with option B."
 skill-loop sessions prune
 skill-loop sessions prune --dry-run
 skill-loop sessions prune --all
@@ -272,6 +303,7 @@ skill-loop sessions prune --all
 
 `skill-loop run` also prints the session directory plus the captured `stdout.log` and `stderr.log` paths when a detached run starts.
 Scheduled sessions appear in `skill-loop sessions ls` with `scheduled` status and a `next:` timestamp. When a scheduled workflow is actively executing, the session switches to `running` and reports `iter: current/max`.
+If a route selects `blocked: true`, the run stops in `blocked` status until a human resumes it.
 Use `skill-loop sessions show` to launch the embedded React dashboard for the current repository and manage sessions from your browser.
 
 ## Architecture

@@ -19,6 +19,21 @@ type SkillExecutor interface {
 
 type RunObserver interface {
 	IterationStarted(iteration int, maxIterations int, skill string)
+	SkillCompleted(iteration int, maxIterations int, skill string, stdout string)
+}
+
+type BlockedError struct {
+	RouteID string
+	Reason  string
+	Skill   string
+	Prompt  string
+}
+
+func (e *BlockedError) Error() string {
+	if strings.TrimSpace(e.Reason) != "" {
+		return fmt.Sprintf("workflow blocked on route %q: %s", e.RouteID, e.Reason)
+	}
+	return fmt.Sprintf("workflow blocked on route %q", e.RouteID)
 }
 
 type defaultExecutor struct{}
@@ -87,6 +102,9 @@ func runWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 		if err != nil {
 			return fmt.Errorf("skill %q failed: %w", currentSkill, err)
 		}
+		if observer != nil {
+			observer.SkillCompleted(i+1, maxIterations, currentSkill, result.Stdout)
+		}
 
 		route, reason, err := selectRoute(exec, cfg.Router, currentSkill, skill.Next, result.Stdout, opts)
 		if err != nil {
@@ -104,11 +122,20 @@ func runWith(cfg *config.Config, maxIterations int, prompt string, entrypoint st
 			return nil
 		}
 
+		handoff = buildHandoff(currentSkill, route.ID, reason, result.Stdout)
+		if route.Blocked {
+			return &BlockedError{
+				RouteID: route.ID,
+				Reason:  reason,
+				Skill:   route.Skill,
+				Prompt:  handoff,
+			}
+		}
+
 		if _, ok := cfg.Skills[route.Skill]; !ok {
 			return fmt.Errorf("next skill %q (resolved from route %q) not found in config", route.Skill, route.ID)
 		}
 
-		handoff = buildHandoff(currentSkill, route.ID, reason, result.Stdout)
 		currentSkill = route.Skill
 	}
 

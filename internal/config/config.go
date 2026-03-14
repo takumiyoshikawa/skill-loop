@@ -16,6 +16,7 @@ type Route struct {
 	Criteria   string `yaml:"criteria,omitempty" jsonschema:"description=Judgment criteria used by the router agent when deciding whether this route should be chosen."`
 	Skill      string `yaml:"skill,omitempty" jsonschema:"description=Target skill name to route to. Mutually exclusive with done."`
 	Done       bool   `yaml:"done,omitempty" jsonschema:"description=Terminate the workflow when this route is selected. Mutually exclusive with skill."`
+	Blocked    bool   `yaml:"blocked,omitempty" jsonschema:"description=Pause the workflow and mark the session blocked awaiting human input. Requires skill and is mutually exclusive with done."`
 	LegacyWhen string `yaml:"when,omitempty" json:"-" jsonschema:"-"`
 }
 
@@ -113,10 +114,16 @@ func Load(path string) (*Config, error) {
 				return nil, fmt.Errorf("skill %q: route[%d] requires criteria when multiple routes are present", name, i)
 			}
 			if route.Done {
+				if route.Blocked {
+					return nil, fmt.Errorf("skill %q: route[%d] cannot set both done and blocked", name, i)
+				}
 				if route.Skill != "" {
 					return nil, fmt.Errorf("skill %q: route[%d] cannot set both done and skill", name, i)
 				}
 				continue
+			}
+			if route.Blocked && route.Skill == "" {
+				return nil, fmt.Errorf("skill %q: route[%d] must set skill when blocked is true", name, i)
 			}
 			if route.Skill == "" {
 				return nil, fmt.Errorf("skill %q: route[%d] must set either skill or done", name, i)

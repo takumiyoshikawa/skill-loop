@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -13,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/takumiyoshikawa/skill-loop/internal/config"
+	"github.com/takumiyoshikawa/skill-loop/internal/executor"
 	"github.com/takumiyoshikawa/skill-loop/internal/orchestrator"
 	"github.com/takumiyoshikawa/skill-loop/internal/scheduler"
 	"github.com/takumiyoshikawa/skill-loop/internal/session"
@@ -62,7 +65,22 @@ Use --attach to attach to that tmux session immediately.`,
 
 			// Child mode for detached orchestrator process.
 			if os.Getenv("SKILL_LOOP_RUN_CHILD") == "1" {
-				return orchestrator.Run(cfg, maxIterations, prompt, entrypoint)
+				runErr := orchestrator.RunWithObserver(
+					cfg,
+					maxIterations,
+					prompt,
+					entrypoint,
+					&defaultExecutor{},
+					newSessionRunObserver(os.Getenv("SKILL_LOOP_SESSION_REPO_ROOT"), os.Getenv("SKILL_LOOP_SESSION_ID")),
+				)
+				var blocked *orchestrator.BlockedError
+				if errors.As(runErr, &blocked) {
+					if err := persistBlockedSession(blocked); err != nil {
+						return err
+					}
+					return nil
+				}
+				return runErr
 			}
 
 			childArgs := buildRunChildArgs(cfgPath, maxIterations, prompt, entrypoint)
@@ -173,12 +191,16 @@ func startDetachedScheduledRun(cfg *config.Config, cfgPath string, workflowName 
 }
 
 func startDetachedSession(cfgPath string, workflowName string, childArgs []string, childEnv map[string]string) (*session.Metadata, error) {
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("get working directory: %w", err)
+	configDir := filepath.Dir(cfgPath)
+	if configDir == "" || configDir == "." {
+		var err error
+		configDir, err = os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("get working directory: %w", err)
+		}
 	}
 
-	repoRoot, err := session.ResolveRepoRoot(wd)
+	repoRoot, err := session.ResolveRepoRoot(configDir)
 	if err != nil {
 		return nil, err
 	}
@@ -187,22 +209,15 @@ func startDetachedSession(cfgPath string, workflowName string, childArgs []strin
 	if err != nil {
 		return nil, fmt.Errorf("resolve executable path: %w", err)
 	}
-	exePath, err = filepath.Abs(exePath)
+	exePath, err = resolveDetachedBinary(exePath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve absolute executable path: %w", err)
+		return nil, err
 	}
 
 	command := append([]string{"env"}, envAssignments(childEnv)...)
 	command = append(command, exePath)
 	command = append(command, childArgs...)
-	workingDir := wd
-	// `go run` builds into a temporary location; use source invocation for detached child.
-	if strings.Contains(exePath, string(filepath.Separator)+"go-build") {
-		command = append([]string{"env"}, envAssignments(childEnv)...)
-		command = append(command, "go", "run", "./cmd/skill-loop")
-		command = append(command, childArgs...)
-		workingDir = repoRoot
-	}
+	workingDir := configDir
 
 	meta, err := session.New(repoRoot, workingDir, workflowName, "orchestrator", "skill-loop", command, 0, 0)
 	if err != nil {
@@ -232,4 +247,109 @@ func envAssignments(env map[string]string) []string {
 	}
 	sort.Strings(assignments)
 	return assignments
+}
+
+type defaultExecutor struct{}
+
+func (d *defaultExecutor) ExecuteSkill(name string, agent config.Agent, input string, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
+	return executor.ExecuteSkill(name, agent, input, opts)
+}
+
+func (d *defaultExecutor) RouteSkillOutput(skillName string, router config.Agent, output string, routes []config.Route, opts executor.ExecutionOptions) (*executor.RouterDecision, error) {
+	return executor.RouteSkillOutput(skillName, router, output, routes, opts)
+}
+
+type sessionRunObserver struct {
+	repoRoot  string
+	sessionID string
+}
+
+func newSessionRunObserver(repoRoot string, sessionID string) orchestrator.RunObserver {
+	if strings.TrimSpace(repoRoot) == "" || strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	return &sessionRunObserver{repoRoot: repoRoot, sessionID: sessionID}
+}
+
+func (o *sessionRunObserver) IterationStarted(iteration int, maxIterations int, skill string) {
+	_ = o.update(func(meta *session.Metadata) {
+		meta.Status = session.StatusRunning
+		meta.CurrentIteration = iteration
+		meta.MaxIterations = maxIterations
+		meta.CurrentSkill = skill
+	})
+}
+
+func (o *sessionRunObserver) SkillCompleted(iteration int, maxIterations int, skill string, stdout string) {
+	_ = o.update(func(meta *session.Metadata) {
+		meta.Status = session.StatusRunning
+		meta.CurrentIteration = iteration
+		meta.MaxIterations = maxIterations
+		meta.CurrentSkill = skill
+		meta.LastSkillOutput = stdout
+	})
+}
+
+func (o *sessionRunObserver) update(apply func(*session.Metadata)) error {
+	meta, err := session.LoadByID(o.repoRoot, o.sessionID)
+	if err != nil {
+		return err
+	}
+	apply(meta)
+	return session.Save(meta)
+}
+
+func resolveDetachedBinary(exePath string) (string, error) {
+	exePath, err := filepath.Abs(exePath)
+	if err != nil {
+		return "", fmt.Errorf("resolve absolute executable path: %w", err)
+	}
+
+	if !strings.Contains(exePath, string(filepath.Separator)+"go-build") {
+		return exePath, nil
+	}
+
+	installedPath, err := exec.LookPath("skill-loop")
+	if err != nil {
+		return "", fmt.Errorf("detached runs require an installed skill-loop binary on PATH when launched via go run: %w", err)
+	}
+	installedPath, err = filepath.Abs(installedPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve installed skill-loop path: %w", err)
+	}
+	return installedPath, nil
+}
+
+func persistBlockedSession(blocked *orchestrator.BlockedError) error {
+	sessionID := os.Getenv("SKILL_LOOP_SESSION_ID")
+	if sessionID == "" {
+		return fmt.Errorf("persist blocked session: SKILL_LOOP_SESSION_ID is required")
+	}
+
+	repoRoot := os.Getenv("SKILL_LOOP_SESSION_REPO_ROOT")
+	if repoRoot == "" {
+		var err error
+		repoRoot, err = session.ResolveRepoRoot("")
+		if err != nil {
+			return fmt.Errorf("persist blocked session: %w", err)
+		}
+	}
+
+	meta, err := session.LoadByID(repoRoot, sessionID)
+	if err != nil {
+		return fmt.Errorf("persist blocked session: %w", err)
+	}
+
+	now := time.Now().UTC()
+	meta.Status = session.StatusBlocked
+	meta.EndedAt = &now
+	meta.BlockReason = blocked.Reason
+	meta.ResumeSkill = blocked.Skill
+	meta.ResumePrompt = blocked.Prompt
+	meta.LastError = ""
+
+	if err := session.Save(meta); err != nil {
+		return fmt.Errorf("persist blocked session: %w", err)
+	}
+	return nil
 }

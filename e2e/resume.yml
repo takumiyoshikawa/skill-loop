@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
+
+name: e2e-resume
+default_entrypoint: pass-through
+max_iterations: 2
+router:
+  runtime: codex
+  model: gpt-5.4
+  args:
+    - "--full-auto"
+
+skills:
+  pass-through:
+    agent:
+      runtime: claude
+      model: claude-sonnet-4-6
+      args:
+        - "--dangerously-skip-permissions"
+    next:
+      - id: approve
+        criteria: "If the skill output contains <APPROVED>, finish the workflow."
+        done: true
+      - id: ask-human
+        criteria: "If the skill output contains <NEEDS_HUMAN>, block and wait for a human to resume."
+        blocked: true
+        skill: pass-through

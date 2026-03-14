@@ -58,7 +58,7 @@ func TestFormatSessionDetailsIncludesPathsAndError(t *testing.T) {
 	ended := now.Add(2 * time.Minute)
 	meta := &session.Metadata{
 		ID:           "session-123",
-		Status:       session.StatusFailed,
+		Status:       session.StatusBlocked,
 		StartedAt:    now,
 		LastOutputAt: now.Add(time.Minute),
 		EndedAt:      &ended,
@@ -66,19 +66,21 @@ func TestFormatSessionDetailsIncludesPathsAndError(t *testing.T) {
 		StdoutPath:   "/tmp/session-123/stdout.log",
 		StderrPath:   "/tmp/session-123/stderr.log",
 		WorkingDir:   "/repo",
-		LastError:    "agent exited with code 1",
+		BlockReason:  "waiting for review",
+		ResumeSkill:  "apply-feedback",
 	}
 
 	got := formatSessionDetails(meta)
 
 	for _, want := range []string{
 		"ID: session-123",
-		"Status: failed",
+		"Status: blocked",
 		"Session: /tmp/session-123",
 		"Stdout: /tmp/session-123/stdout.log",
 		"Stderr: /tmp/session-123/stderr.log",
 		"Working dir: /repo",
-		"Last error: agent exited with code 1",
+		"Block reason: waiting for review",
+		"Resume skill: apply-feedback",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("formatSessionDetails() missing %q\nfull output:\n%s", want, got)

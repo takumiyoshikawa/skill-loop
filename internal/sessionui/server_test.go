@@ -15,20 +15,21 @@ import (
 func TestListSessionsFiltersAndFormats(t *testing.T) {
 	now := time.Date(2026, 3, 7, 8, 9, 10, 0, time.UTC)
 	running := &session.Metadata{
-		ID:           "run-1",
-		WorkflowName: "nightly-review",
-		Skill:        "orchestrator",
-		Runtime:      "skill-loop",
-		RepoRoot:     "/repo",
-		ConfigPath:   "/repo/skill-loop.yml",
-		ScriptPath:   "/tmp/run-1/run.sh",
-		StdoutPath:   "/tmp/run-1/stdout.log",
-		StderrPath:   "/tmp/run-1/stderr.log",
-		ExitCodePath: "/tmp/run-1/exit.code",
-		Status:       session.StatusRunning,
-		StartedAt:    now,
-		LastOutputAt: now.Add(2 * time.Minute),
-		Command:      []string{"skill-loop", "run"},
+		ID:              "run-1",
+		WorkflowName:    "nightly-review",
+		Skill:           "orchestrator",
+		Runtime:         "skill-loop",
+		RepoRoot:        "/repo",
+		ConfigPath:      "/repo/skill-loop.yml",
+		ScriptPath:      "/tmp/run-1/run.sh",
+		StdoutPath:      "/tmp/run-1/stdout.log",
+		StderrPath:      "/tmp/run-1/stderr.log",
+		ExitCodePath:    "/tmp/run-1/exit.code",
+		Status:          session.StatusRunning,
+		StartedAt:       now,
+		LastOutputAt:    now.Add(2 * time.Minute),
+		LastSkillOutput: "latest stdout summary",
+		Command:         []string{"skill-loop", "run"},
 	}
 
 	h := &handler{
@@ -72,6 +73,9 @@ func TestListSessionsFiltersAndFormats(t *testing.T) {
 	}
 	if !strings.Contains(got.Sessions[0].Detail, "last_output:") {
 		t.Fatalf("detail = %q, want running summary", got.Sessions[0].Detail)
+	}
+	if got.Sessions[0].PreviousSummary != "latest stdout summary" {
+		t.Fatalf("previousSummary = %q, want latest stdout summary", got.Sessions[0].PreviousSummary)
 	}
 }
 
@@ -136,6 +140,70 @@ func TestDeleteSessionRejectsRunningSession(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusConflict)
+	}
+}
+
+func TestResumeSession(t *testing.T) {
+	meta := &session.Metadata{
+		ID:          "blocked-1",
+		Skill:       "orchestrator",
+		Status:      session.StatusBlocked,
+		BlockReason: "waiting for approval",
+		ResumeSkill: "apply-feedback",
+	}
+
+	var gotPrompt string
+	h := &handler{
+		repoRoot: "/repo",
+		store: sessionStore{
+			load: func(repoRoot, id string) (*session.Metadata, error) {
+				return meta, nil
+			},
+			reconcile: func(meta *session.Metadata) error { return nil },
+			resume: func(meta *session.Metadata, prompt string) error {
+				gotPrompt = prompt
+				meta.Status = session.StatusRunning
+				meta.BlockReason = ""
+				meta.ResumeSkill = ""
+				return nil
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sessions/blocked-1/resume", strings.NewReader(`{"prompt":"ship it"}`))
+	req.SetPathValue("id", "blocked-1")
+	rec := httptest.NewRecorder()
+
+	h.handleResumeSession(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if gotPrompt != "ship it" {
+		t.Fatalf("prompt = %q, want ship it", gotPrompt)
+	}
+}
+
+func TestExtractPreviousSummary(t *testing.T) {
+	got := extractPreviousSummary(strings.Join([]string{
+		"Previous skill: review",
+		"Selected route: ask-human",
+		"",
+		"Previous skill stdout:",
+		"<NEEDS_HUMAN>",
+	}, "\n"))
+	if got != "<NEEDS_HUMAN>" {
+		t.Fatalf("summary = %q, want %q", got, "<NEEDS_HUMAN>")
+	}
+}
+
+func TestPreviousSummaryPrefersLastSkillOutput(t *testing.T) {
+	meta := &session.Metadata{
+		LastSkillOutput: "latest",
+		ResumePrompt:    "Previous skill stdout:\nstale",
+	}
+	if got := previousSummary(meta); got != "latest" {
+		t.Fatalf("previousSummary() = %q, want latest", got)
 	}
 }
 

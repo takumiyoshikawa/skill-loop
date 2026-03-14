@@ -25,6 +25,10 @@ input {
   font: inherit;
 }
 
+textarea {
+  font: inherit;
+}
+
 button {
   cursor: pointer;
 }
@@ -376,6 +380,63 @@ pre {
   word-break: break-word;
   font-size: 0.86rem;
   line-height: 1.4;
+}
+
+.summary-section,
+.resume-form {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: #12161e;
+}
+
+.section-label {
+  display: block;
+  color: #8b93a1;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.summary-output {
+  margin: 8px 0 0;
+  color: #dce2eb;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.resume-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.resume-help {
+  margin: 6px 0 0;
+  color: #8b93a1;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.resume-form textarea {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #171b24;
+  color: #eef2f8;
+  resize: vertical;
+}
+
+.resume-form textarea:focus {
+  outline: 1px solid rgba(93, 136, 255, 0.45);
+  border-color: rgba(93, 136, 255, 0.45);
 }
 
 .error-banner {

@@ -2,6 +2,7 @@ export type SessionStatus =
   | "pending"
   | "scheduled"
   | "running"
+  | "blocked"
   | "idle"
   | "done"
   | "failed"
@@ -34,6 +35,11 @@ export type Session = {
   currentIteration?: number;
   maxIterations?: number;
   currentSkill?: string;
+  lastSkillOutput?: string;
+  blockReason?: string;
+  resumeSkill?: string;
+  resumePrompt?: string;
+  previousSummary?: string;
   idleTimeoutSeconds: number;
   maxRestarts: number;
   restartCount: number;

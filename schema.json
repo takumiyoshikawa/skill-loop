@@ -86,6 +86,10 @@
         "done": {
           "type": "boolean",
           "description": "Terminate the workflow when this route is selected. Mutually exclusive with skill."
+        },
+        "blocked": {
+          "type": "boolean",
+          "description": "Pause the workflow and mark the session blocked awaiting human input. Requires skill and is mutually exclusive with done."
         }
       },
       "additionalProperties": false,

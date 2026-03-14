@@ -32,12 +32,17 @@ type mockObserver struct {
 	iterations []int
 	maxes      []int
 	skills     []string
+	completed  []string
 }
 
 func (m *mockObserver) IterationStarted(iteration int, maxIterations int, skill string) {
 	m.iterations = append(m.iterations, iteration)
 	m.maxes = append(m.maxes, maxIterations)
 	m.skills = append(m.skills, skill)
+}
+
+func (m *mockObserver) SkillCompleted(iteration int, maxIterations int, skill string, stdout string) {
+	m.completed = append(m.completed, stdout)
 }
 
 func (m *mockExecutor) ExecuteSkill(name string, agent config.Agent, input string, opts executor.ExecutionOptions) (*executor.SkillResult, error) {
@@ -182,6 +187,46 @@ func TestRunRouterError(t *testing.T) {
 	}
 }
 
+func TestRunReturnsBlockedError(t *testing.T) {
+	cfg := &config.Config{
+		DefaultEntrypoint: "review",
+		Skills: map[string]config.Skill{
+			"review": {
+				Next: []config.Route{{
+					ID:      "need-human",
+					Blocked: true,
+					Skill:   "apply-feedback",
+				}},
+			},
+			"apply-feedback": {
+				Next: []config.Route{{ID: "done", Done: true}},
+			},
+		},
+	}
+
+	mock := &mockExecutor{
+		skillCalls: []mockSkillCall{
+			{result: &executor.SkillResult{Stdout: "Need human approval"}},
+		},
+	}
+
+	err := RunWith(cfg, 10, "start here", "", mock)
+	var blocked *BlockedError
+	if err == nil || !strings.Contains(err.Error(), "workflow blocked") {
+		t.Fatalf("RunWith() error = %v, want blocked error", err)
+	}
+	if _, ok := err.(*BlockedError); !ok {
+		t.Fatalf("RunWith() error type = %T, want *BlockedError", err)
+	}
+	blocked = err.(*BlockedError)
+	if blocked.Skill != "apply-feedback" {
+		t.Fatalf("blocked skill = %q, want apply-feedback", blocked.Skill)
+	}
+	if !strings.Contains(blocked.Prompt, "Previous skill: review") {
+		t.Fatalf("blocked prompt = %q, want previous skill handoff", blocked.Prompt)
+	}
+}
+
 func TestRunMaxIterationsReached(t *testing.T) {
 	cfg := &config.Config{
 		DefaultEntrypoint: "impl",
@@ -224,6 +269,31 @@ func TestRunDefaultMaxIterations(t *testing.T) {
 
 	if err := RunWith(cfg, 0, "", "", mock); err != nil {
 		t.Fatalf("RunWith() error: %v", err)
+	}
+}
+
+func TestRunObserverReceivesSkillOutput(t *testing.T) {
+	cfg := &config.Config{
+		DefaultEntrypoint: "review",
+		Skills: map[string]config.Skill{
+			"review": {
+				Next: []config.Route{{ID: "approve", Done: true}},
+			},
+		},
+	}
+
+	mock := &mockExecutor{
+		skillCalls: []mockSkillCall{
+			{result: &executor.SkillResult{Stdout: "final summary"}},
+		},
+	}
+	observer := &mockObserver{}
+
+	if err := RunWithObserver(cfg, 10, "", "", mock, observer); err != nil {
+		t.Fatalf("RunWithObserver() error: %v", err)
+	}
+	if len(observer.completed) != 1 || observer.completed[0] != "final summary" {
+		t.Fatalf("completed outputs = %v, want [final summary]", observer.completed)
 	}
 }
 

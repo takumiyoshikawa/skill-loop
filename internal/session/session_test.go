@@ -3,6 +3,7 @@ package session
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -328,6 +329,148 @@ exit 0
 
 	if meta.Status != StatusScheduled {
 		t.Fatalf("status = %s, want %s", meta.Status, StatusScheduled)
+	}
+}
+
+func TestReconcileKeepsBlockedStatusWhenExitCodeExists(t *testing.T) {
+	tempDir := t.TempDir()
+	exitCodePath := filepath.Join(tempDir, "exit.code")
+	if err := os.WriteFile(exitCodePath, []byte("0\n"), 0o600); err != nil {
+		t.Fatalf("failed to write exit code: %v", err)
+	}
+
+	meta := &Metadata{
+		ID:           "blocked-session",
+		RepoRoot:     tempDir,
+		ScriptPath:   filepath.Join(tempDir, "run.sh"),
+		ExitCodePath: exitCodePath,
+		StdoutPath:   filepath.Join(tempDir, "stdout.log"),
+		StderrPath:   filepath.Join(tempDir, "stderr.log"),
+		TmuxSession:  "skill-loop-blocked-session",
+		Status:       StatusBlocked,
+		BlockReason:  "waiting for human approval",
+		ResumeSkill:  "apply-feedback",
+		ResumePrompt: "base handoff",
+		StartedAt:    time.Now().UTC(),
+		LastOutputAt: time.Now().UTC(),
+	}
+
+	if err := Reconcile(meta); err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+	if meta.Status != StatusBlocked {
+		t.Fatalf("status = %s, want %s", meta.Status, StatusBlocked)
+	}
+	if meta.EndedAt == nil {
+		t.Fatal("expected blocked reconcile to set ended_at")
+	}
+}
+
+func TestBuildResumeCommand(t *testing.T) {
+	meta := &Metadata{
+		ID:          "blocked-session",
+		Status:      StatusBlocked,
+		ConfigPath:  "/repo/skill-loop.yml",
+		ResumeSkill: "apply-feedback",
+		ResumePrompt: strings.Join([]string{
+			"Previous skill: review",
+			"",
+			"Previous skill stdout:",
+			"needs a human",
+		}, "\n"),
+		Command: []string{
+			"env",
+			"SKILL_LOOP_RUN_CHILD=1",
+			"/usr/local/bin/skill-loop",
+			"run",
+			"/repo/original.yml",
+			"--max-iterations",
+			"5",
+			"--prompt",
+			"old prompt",
+			"--entrypoint",
+			"review",
+		},
+	}
+
+	command, err := BuildResumeCommand(meta, "Please continue")
+	if err != nil {
+		t.Fatalf("BuildResumeCommand() error: %v", err)
+	}
+
+	got := strings.Join(command, "\n")
+	for _, want := range []string{
+		"/repo/skill-loop.yml",
+		"--max-iterations",
+		"5",
+		"--entrypoint",
+		"apply-feedback",
+		"Human input:\nPlease continue",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("BuildResumeCommand() missing %q\nfull command:\n%s", want, got)
+		}
+	}
+}
+
+func TestBuildResumeCommandWithGoRunTemplate(t *testing.T) {
+	meta := &Metadata{
+		ID:          "blocked-session",
+		Status:      StatusBlocked,
+		ConfigPath:  "/repo/e2e/resume.yml",
+		ResumeSkill: "pass-through",
+		ResumePrompt: strings.Join([]string{
+			"Previous skill: pass-through",
+			"",
+			"Previous skill stdout:",
+			"<NEEDS_HUMAN>",
+		}, "\n"),
+		Command: []string{
+			"env",
+			"SKILL_LOOP_RUN_CHILD=1",
+			"go",
+			"run",
+			"./cmd/skill-loop",
+			"run",
+			"/repo/old.yml",
+			"--max-iterations",
+			"2",
+		},
+	}
+
+	command, err := BuildResumeCommand(meta, "ok")
+	if err != nil {
+		t.Fatalf("BuildResumeCommand() error: %v", err)
+	}
+	if strings.Join(command[:5], " ") != "env SKILL_LOOP_RUN_CHILD=1 go run ./cmd/skill-loop" {
+		t.Fatalf("unexpected command prefix: %q", strings.Join(command, " "))
+	}
+	if command[5] != "run" || command[6] != "/repo/e2e/resume.yml" {
+		t.Fatalf("unexpected run/config segment: %v", command)
+	}
+}
+
+func TestUpdateCommandPrefersConfigDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	meta := &Metadata{
+		ConfigPath:   filepath.Join(tempDir, "e2e", "resume.yml"),
+		WorkingDir:   tempDir,
+		ScriptPath:   filepath.Join(tempDir, "run.sh"),
+		StdoutPath:   filepath.Join(tempDir, "stdout.log"),
+		StderrPath:   filepath.Join(tempDir, "stderr.log"),
+		ExitCodePath: filepath.Join(tempDir, "exit.code"),
+		Command:      []string{"echo", "hello"},
+	}
+	if err := os.MkdirAll(filepath.Dir(meta.ConfigPath), 0o750); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+
+	if err := UpdateCommand(meta, []string{"echo", "updated"}); err != nil {
+		t.Fatalf("UpdateCommand() error: %v", err)
+	}
+
+	if meta.WorkingDir != filepath.Dir(meta.ConfigPath) {
+		t.Fatalf("workingDir = %q, want %q", meta.WorkingDir, filepath.Dir(meta.ConfigPath))
 	}
 }
 
