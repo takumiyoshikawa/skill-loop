@@ -4,16 +4,16 @@ name: e2e-skill-loop
 default_entrypoint: 1-impl
 max_iterations: 5
 router:
-  runtime: codex
-  model: gpt-5.4
+  runtime: claude
+  model: claude-sonnet-4-6
   args:
-    - "--full-auto"
+    - "--dangerously-skip-permissions"
 
 skills:
   1-impl:
     agent:
       runtime: claude
-      model: claude-sonnet-4.6
+      model: claude-sonnet-4-6
       args:
         - "--dangerously-skip-permissions"
     next:

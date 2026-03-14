@@ -3,6 +3,7 @@ import type { ErrorPayload, Session, SessionGroup, SessionStatus } from "./types
 export const STATUS_OPTIONS = [
   "all",
   "running",
+  "blocked",
   "scheduled",
   "failed",
   "done",
@@ -61,11 +62,13 @@ export function statusToneClass(status: SessionStatus): string {
       return "tone-green";
     case "scheduled":
       return "tone-blue";
+    case "blocked":
+      return "tone-amber";
+    case "done":
+      return "tone-green";
     case "failed":
     case "stopped":
       return "tone-red";
-    case "done":
-      return "tone-amber";
     default:
       return "tone-slate";
   }

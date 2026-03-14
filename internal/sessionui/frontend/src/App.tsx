@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { SessionContent } from "./components/SessionContent";
 import { Sidebar } from "./components/Sidebar";
 import type { LogPayload, Session, SessionStatus, SessionsPayload } from "./types";
-import { getErrorMessage, getJSON, groupSessions, send, sendJSON } from "./utils";
+import { getErrorMessage, getJSON, groupSessions, sendJSON } from "./utils";
 
 const POLL_MS = 4000;
 
@@ -18,6 +18,7 @@ export default function App() {
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState("");
   const [flash, setFlash] = useState("");
+  const [resumeDraft, setResumeDraft] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +63,10 @@ export default function App() {
   );
 
   useEffect(() => {
+    setResumeDraft("");
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selectedSession) {
       setLog(null);
       return;
@@ -70,11 +75,11 @@ export default function App() {
     let cancelled = false;
     const refreshLog = async () => {
       try {
-        const payload = await getJSON<LogPayload>(
+        const activePayload = await getJSON<LogPayload>(
           `/api/sessions/${selectedSession.id}/logs/${activeStream}`,
         );
         if (!cancelled) {
-          setLog(payload);
+          setLog(activePayload);
         }
       } catch (err) {
         if (!cancelled) {
@@ -154,18 +159,21 @@ export default function App() {
     }
   }
 
-  async function deleteSelected() {
+  async function resumeSelected(prompt: string) {
     if (!selectedSession) {
-      return;
-    }
-    if (!window.confirm(`Delete session ${selectedSession.id}?`)) {
       return;
     }
     setMutating(true);
     try {
-      await send(`/api/sessions/${selectedSession.id}`, { method: "DELETE" });
-      setSessions((current) => current.filter((session) => session.id !== selectedSession.id));
-      setFlash(`Deleted ${selectedSession.id}`);
+      const payload = await sendJSON<Session>(`/api/sessions/${selectedSession.id}/resume`, {
+        method: "POST",
+        body: JSON.stringify({ prompt }),
+      });
+      setSessions((current) =>
+        current.map((session) => (session.id === payload.id ? payload : session)),
+      );
+      setResumeDraft("");
+      setFlash(`Resumed ${payload.id}`);
       setError("");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -226,10 +234,12 @@ export default function App() {
         log={log}
         activeStream={activeStream}
         mutating={mutating}
+        resumeDraft={resumeDraft}
         onPruneInactive={() => void prune(true)}
         onRefreshSelected={() => void refreshSelected()}
         onStopSelected={() => void stopSelected()}
-        onDeleteSelected={() => void deleteSelected()}
+        onResumeDraftChange={setResumeDraft}
+        onResumeSelected={(prompt) => void resumeSelected(prompt)}
         onActiveStreamChange={setActiveStream}
       />
 

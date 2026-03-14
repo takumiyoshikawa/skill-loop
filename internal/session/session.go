@@ -26,6 +26,7 @@ const (
 	StatusPending   Status = "pending"
 	StatusScheduled Status = "scheduled"
 	StatusRunning   Status = "running"
+	StatusBlocked   Status = "blocked"
 	StatusIdle      Status = "idle"
 	StatusDone      Status = "done"
 	StatusFailed    Status = "failed"
@@ -57,6 +58,10 @@ type Metadata struct {
 	CurrentIteration   int        `json:"current_iteration,omitempty"`
 	MaxIterations      int        `json:"max_iterations,omitempty"`
 	CurrentSkill       string     `json:"current_skill,omitempty"`
+	LastSkillOutput    string     `json:"last_skill_output,omitempty"`
+	BlockReason        string     `json:"block_reason,omitempty"`
+	ResumeSkill        string     `json:"resume_skill,omitempty"`
+	ResumePrompt       string     `json:"resume_prompt,omitempty"`
 	IdleTimeoutSeconds int        `json:"idle_timeout_seconds"`
 	MaxRestarts        int        `json:"max_restarts"`
 	RestartCount       int        `json:"restart_count"`
@@ -186,6 +191,18 @@ func Save(meta *Metadata) error {
 	return nil
 }
 
+func UpdateCommand(meta *Metadata, command []string) error {
+	if len(command) == 0 {
+		return fmt.Errorf("command is required")
+	}
+	meta.Command = append([]string(nil), command...)
+	meta.WorkingDir = preferredWorkingDir(meta.ConfigPath, meta.WorkingDir)
+	if err := writeScript(meta); err != nil {
+		return err
+	}
+	return Save(meta)
+}
+
 func LoadByID(repoRoot string, id string) (*Metadata, error) {
 	sessionFilePath, err := sessionFileByID(repoRoot, id)
 	if err != nil {
@@ -290,6 +307,10 @@ func Start(meta *Metadata) error {
 	}
 	meta.Status = StatusRunning
 	meta.EndedAt = nil
+	meta.BlockReason = ""
+	meta.ResumeSkill = ""
+	meta.ResumePrompt = ""
+	meta.LastError = ""
 	if meta.LastOutputAt.IsZero() {
 		meta.LastOutputAt = meta.StartedAt
 	}
@@ -316,6 +337,9 @@ func Stop(meta *Metadata) error {
 	now := time.Now().UTC()
 	meta.Status = StatusStopped
 	meta.EndedAt = &now
+	meta.BlockReason = ""
+	meta.ResumeSkill = ""
+	meta.ResumePrompt = ""
 	meta.LastError = ""
 	return Save(meta)
 }
@@ -343,11 +367,23 @@ func Reconcile(meta *Metadata) error {
 		}
 
 		now := time.Now().UTC()
+		if meta.Status == StatusBlocked {
+			if meta.EndedAt == nil {
+				meta.EndedAt = &now
+			}
+			return Save(meta)
+		}
 		if exitCode == 0 {
 			meta.Status = StatusDone
+			meta.BlockReason = ""
+			meta.ResumeSkill = ""
+			meta.ResumePrompt = ""
 			meta.LastError = ""
 		} else {
 			meta.Status = StatusFailed
+			meta.BlockReason = ""
+			meta.ResumeSkill = ""
+			meta.ResumePrompt = ""
 			meta.LastError = fmt.Sprintf("agent exited with code %d", exitCode)
 		}
 		if meta.EndedAt == nil {
@@ -382,6 +418,82 @@ func Reconcile(meta *Metadata) error {
 	}
 
 	return nil
+}
+
+func BuildResumeCommand(meta *Metadata, humanInput string) ([]string, error) {
+	if meta.Status != StatusBlocked {
+		return nil, fmt.Errorf("session %s is not blocked", meta.ID)
+	}
+	if meta.Schedule != "" {
+		return nil, fmt.Errorf("resume is not supported for scheduled sessions")
+	}
+	if meta.ConfigPath == "" {
+		return nil, fmt.Errorf("session %s is missing config_path", meta.ID)
+	}
+	if meta.ResumeSkill == "" {
+		return nil, fmt.Errorf("session %s is missing resume_skill", meta.ID)
+	}
+	if len(meta.Command) == 0 {
+		return nil, fmt.Errorf("session %s is missing command template", meta.ID)
+	}
+
+	runIdx := -1
+	for i := len(meta.Command) - 1; i >= 0; i-- {
+		arg := meta.Command[i]
+		if arg == "run" {
+			runIdx = i
+			break
+		}
+	}
+	if runIdx == -1 {
+		return nil, fmt.Errorf("session %s command does not contain run subcommand", meta.ID)
+	}
+	if runIdx+1 >= len(meta.Command) {
+		return nil, fmt.Errorf("session %s command is missing config path", meta.ID)
+	}
+
+	command := append([]string(nil), meta.Command[:runIdx+2]...)
+	command[runIdx+1] = meta.ConfigPath
+
+	skipNext := false
+	for _, arg := range meta.Command[runIdx+2:] {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		switch arg {
+		case "--prompt", "-p", "--entrypoint", "-e":
+			skipNext = true
+		default:
+			command = append(command, arg)
+		}
+	}
+
+	prompt := strings.TrimSpace(meta.ResumePrompt)
+	humanInput = strings.TrimSpace(humanInput)
+	switch {
+	case prompt != "" && humanInput != "":
+		prompt += "\n\nHuman input:\n" + humanInput
+	case humanInput != "":
+		prompt = humanInput
+	}
+	if prompt != "" {
+		command = append(command, "--prompt", prompt)
+	}
+	command = append(command, "--entrypoint", meta.ResumeSkill)
+
+	return command, nil
+}
+
+func preferredWorkingDir(configPath string, fallback string) string {
+	if strings.TrimSpace(configPath) == "" {
+		return fallback
+	}
+	dir := filepath.Dir(configPath)
+	if dir == "" || dir == "." {
+		return fallback
+	}
+	return dir
 }
 
 func HasTMuxSession(name string) (bool, error) {

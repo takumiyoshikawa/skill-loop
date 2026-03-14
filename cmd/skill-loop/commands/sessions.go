@@ -30,6 +30,7 @@ func NewSessionsCmd() *cobra.Command {
 	cmd.AddCommand(newSessionsLogsCmd())
 	cmd.AddCommand(newSessionsAttachCmd())
 	cmd.AddCommand(newSessionsStopCmd())
+	cmd.AddCommand(newSessionsResumeCmd())
 	cmd.AddCommand(newSessionsPruneCmd())
 
 	return cmd
@@ -242,6 +243,56 @@ func newSessionsStopCmd() *cobra.Command {
 	}
 }
 
+func newSessionsResumeCmd() *cobra.Command {
+	var prompt string
+	var attach bool
+
+	cmd := &cobra.Command{
+		Use:   "resume <session-id>",
+		Short: "Resume a blocked run session with optional human input",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			meta, err := loadRunSessionByID(args[0])
+			if err != nil {
+				return err
+			}
+			if err := session.Reconcile(meta); err != nil {
+				return err
+			}
+			if meta.Schedule != "" {
+				return fmt.Errorf("resume is not supported for scheduled sessions")
+			}
+			if meta.Status != session.StatusBlocked {
+				return fmt.Errorf("session %s is not blocked", meta.ID)
+			}
+
+			command, err := session.BuildResumeCommand(meta, prompt)
+			if err != nil {
+				return err
+			}
+			if err := session.UpdateCommand(meta, command); err != nil {
+				return err
+			}
+			if err := session.Start(meta); err != nil {
+				return err
+			}
+
+			fmt.Printf("Resumed in background. run_id=%s\n", meta.ID)
+			fmt.Printf("Attach: skill-loop sessions attach %s\n", meta.ID)
+
+			if attach {
+				return session.Attach(meta)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&prompt, "prompt", "p", "", "Human input appended before resuming the workflow")
+	cmd.Flags().BoolVar(&attach, "attach", false, "Attach to the tmux session immediately after resuming")
+
+	return cmd
+}
+
 func newSessionsPruneCmd() *cobra.Command {
 	var dryRun bool
 	var all bool
@@ -380,6 +431,12 @@ func formatSessionDetails(meta *session.Metadata) string {
 	fmt.Fprintf(&b, "Stdout: %s\n", meta.StdoutPath)
 	fmt.Fprintf(&b, "Stderr: %s\n", meta.StderrPath)
 	fmt.Fprintf(&b, "Working dir: %s\n", meta.WorkingDir)
+	if meta.BlockReason != "" {
+		fmt.Fprintf(&b, "Block reason: %s\n", meta.BlockReason)
+	}
+	if meta.ResumeSkill != "" {
+		fmt.Fprintf(&b, "Resume skill: %s\n", meta.ResumeSkill)
+	}
 	if meta.LastError != "" {
 		fmt.Fprintf(&b, "Last error: %s\n", meta.LastError)
 	}
@@ -473,6 +530,14 @@ func formatSessionDetail(meta *session.Metadata) string {
 			return fmt.Sprintf("iter: %d/%d", meta.CurrentIteration, meta.MaxIterations)
 		}
 		return "last_output: " + meta.LastOutputAt.Local().Format(time.DateTime)
+	case session.StatusBlocked:
+		if meta.BlockReason != "" {
+			return "awaiting input: " + meta.BlockReason
+		}
+		if meta.ResumeSkill != "" {
+			return "awaiting input for " + meta.ResumeSkill
+		}
+		return "awaiting human input"
 	case session.StatusFailed, session.StatusStopped:
 		if meta.LastError != "" {
 			return meta.LastError

@@ -84,9 +84,6 @@ export function Sidebar({
         <div>
           <p className="eyebrow">Workspace</p>
           <h1>{repoName}</h1>
-          <p className="sidebar-path" title={repoRoot}>
-            {repoRoot}
-          </p>
         </div>
         <button type="button" className="secondary-button compact" onClick={onRefresh}>
           Refresh

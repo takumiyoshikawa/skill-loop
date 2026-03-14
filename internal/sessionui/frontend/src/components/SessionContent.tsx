@@ -1,4 +1,4 @@
-import { formatCompactDate } from "../utils";
+import { FormEvent } from "react";
 import type { LogPayload, Session } from "../types";
 
 type SessionContentProps = {
@@ -6,10 +6,12 @@ type SessionContentProps = {
   log: LogPayload | null;
   activeStream: "stdout" | "stderr";
   mutating: boolean;
+  resumeDraft: string;
   onPruneInactive: () => void;
   onRefreshSelected: () => void;
   onStopSelected: () => void;
-  onDeleteSelected: () => void;
+  onResumeDraftChange: (value: string) => void;
+  onResumeSelected: (prompt: string) => void;
   onActiveStreamChange: (stream: "stdout" | "stderr") => void;
 };
 
@@ -18,12 +20,19 @@ export function SessionContent({
   log,
   activeStream,
   mutating,
+  resumeDraft,
   onPruneInactive,
   onRefreshSelected,
   onStopSelected,
-  onDeleteSelected,
+  onResumeDraftChange,
+  onResumeSelected,
   onActiveStreamChange,
 }: SessionContentProps) {
+  function handleResumeSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onResumeSelected(resumeDraft);
+  }
+
   return (
     <main className="content">
       <header className="content-header">
@@ -51,18 +60,6 @@ export function SessionContent({
               >
                 Stop
               </button>
-              <button
-                type="button"
-                className="danger-button"
-                onClick={onDeleteSelected}
-                disabled={
-                  mutating ||
-                  selectedSession.status === "running" ||
-                  selectedSession.status === "scheduled"
-                }
-              >
-                Delete
-              </button>
             </>
           ) : null}
         </div>
@@ -71,37 +68,29 @@ export function SessionContent({
       {selectedSession ? (
         <div className="content-body">
           <section className="summary-card">
-            <p className="eyebrow">Description</p>
-            <div className="session-title">
-              <span className={`status-pill status-${selectedSession.status}`}>
-                {selectedSession.status}
-              </span>
-              <h3>{selectedSession.id}</h3>
+            <div className="summary-section summary-section-top">
+              <span className="section-label">Previous summary</span>
+              <pre className="summary-output">
+                {selectedSession.previousSummary || "(empty)"}
+              </pre>
             </div>
-            <div className="meta-grid">
-              <Meta label="Workflow" value={selectedSession.workflowName} />
-              <Meta label="Config" value={selectedSession.configName} />
-              <Meta label="Runtime" value={selectedSession.runtime} />
-              <Meta label="Started" value={formatCompactDate(selectedSession.startedAt)} />
-              <Meta label="Last output" value={formatCompactDate(selectedSession.lastOutputAt)} />
-              <Meta
-                label="Iterations"
-                value={
-                  selectedSession.maxIterations
-                    ? `${selectedSession.currentIteration ?? 0}/${selectedSession.maxIterations}`
-                    : "-"
-                }
-              />
-            </div>
-            <div className="inline-detail-list">
-              <InlineDetail label="Working dir" value={selectedSession.workingDir} />
-              <InlineDetail label="Session dir" value={selectedSession.sessionDir} />
-              <InlineDetail label="stdout" value={selectedSession.stdoutPath} />
-              <InlineDetail label="stderr" value={selectedSession.stderrPath} />
-              <InlineDetail label="Command" value={selectedSession.command.join(" ")} mono />
-            </div>
-            {selectedSession.lastError ? (
-              <div className="error-banner">{selectedSession.lastError}</div>
+            {selectedSession.status === "blocked" ? (
+              <form className="resume-form" onSubmit={handleResumeSubmit}>
+                <div className="resume-header">
+                  <div>
+                    <span className="section-label">Resume prompt</span>
+                  </div>
+                  <button type="submit" className="secondary-button" disabled={mutating}>
+                    Resume
+                  </button>
+                </div>
+                <textarea
+                  value={resumeDraft}
+                  onChange={(event) => onResumeDraftChange(event.target.value)}
+                  placeholder="Add human guidance, approval, or constraints here."
+                  disabled={mutating}
+                />
+              </form>
             ) : null}
           </section>
 
@@ -135,31 +124,5 @@ export function SessionContent({
         </section>
       )}
     </main>
-  );
-}
-
-function Meta({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="meta-item">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function InlineDetail({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="inline-detail">
-      <span>{label}</span>
-      <code className={mono ? "mono" : undefined}>{value}</code>
-    </div>
   );
 }

@@ -22,6 +22,7 @@ type sessionStore struct {
 	load       func(repoRoot, id string) (*session.Metadata, error)
 	reconcile  func(meta *session.Metadata) error
 	stop       func(meta *session.Metadata) error
+	resume     func(meta *session.Metadata, prompt string) error
 	deleteByID func(repoRoot, id string) error
 	readFile   func(path string) ([]byte, error)
 }
@@ -65,6 +66,11 @@ type sessionDTO struct {
 	CurrentIteration   int            `json:"currentIteration,omitempty"`
 	MaxIterations      int            `json:"maxIterations,omitempty"`
 	CurrentSkill       string         `json:"currentSkill,omitempty"`
+	LastSkillOutput    string         `json:"lastSkillOutput,omitempty"`
+	BlockReason        string         `json:"blockReason,omitempty"`
+	ResumeSkill        string         `json:"resumeSkill,omitempty"`
+	ResumePrompt       string         `json:"resumePrompt,omitempty"`
+	PreviousSummary    string         `json:"previousSummary,omitempty"`
 	IdleTimeoutSeconds int            `json:"idleTimeoutSeconds"`
 	MaxRestarts        int            `json:"maxRestarts"`
 	RestartCount       int            `json:"restartCount"`
@@ -80,6 +86,10 @@ type logResponse struct {
 
 type pruneRequest struct {
 	All bool `json:"all"`
+}
+
+type resumeRequest struct {
+	Prompt string `json:"prompt"`
 }
 
 type pruneResponse struct {
@@ -102,10 +112,20 @@ func NewHandler(repoRoot string) (http.Handler, error) {
 	h := &handler{
 		repoRoot: repoRoot,
 		store: sessionStore{
-			list:       session.List,
-			load:       session.LoadByID,
-			reconcile:  session.Reconcile,
-			stop:       session.Stop,
+			list:      session.List,
+			load:      session.LoadByID,
+			reconcile: session.Reconcile,
+			stop:      session.Stop,
+			resume: func(meta *session.Metadata, prompt string) error {
+				command, err := session.BuildResumeCommand(meta, prompt)
+				if err != nil {
+					return err
+				}
+				if err := session.UpdateCommand(meta, command); err != nil {
+					return err
+				}
+				return session.Start(meta)
+			},
 			deleteByID: session.DeleteByID,
 			readFile:   os.ReadFile,
 		},
@@ -117,6 +137,7 @@ func NewHandler(repoRoot string) (http.Handler, error) {
 	mux.HandleFunc("GET /api/sessions/{id}", h.handleGetSession)
 	mux.HandleFunc("GET /api/sessions/{id}/logs/{stream}", h.handleGetLog)
 	mux.HandleFunc("POST /api/sessions/{id}/stop", h.handleStopSession)
+	mux.HandleFunc("POST /api/sessions/{id}/resume", h.handleResumeSession)
 	mux.HandleFunc("DELETE /api/sessions/{id}", h.handleDeleteSession)
 	mux.HandleFunc("POST /api/sessions/prune", h.handlePruneSessions)
 	mux.Handle("/", h.handleSPA())
@@ -190,6 +211,32 @@ func (h *handler) handleStopSession(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.store.stop(meta); err != nil {
 		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toSessionDTO(meta))
+}
+
+func (h *handler) handleResumeSession(w http.ResponseWriter, r *http.Request) {
+	meta, err := h.loadRunSession(r.PathValue("id"))
+	if err != nil {
+		h.writeSessionError(w, err)
+		return
+	}
+
+	var req resumeRequest
+	if r.Body != nil {
+		defer func() {
+			_ = r.Body.Close()
+		}()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeErrorMessage(w, http.StatusBadRequest, "invalid resume request")
+			return
+		}
+	}
+
+	if err := h.store.resume(meta, req.Prompt); err != nil {
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -354,6 +401,11 @@ func toSessionDTO(meta *session.Metadata) sessionDTO {
 		CurrentIteration:   meta.CurrentIteration,
 		MaxIterations:      meta.MaxIterations,
 		CurrentSkill:       meta.CurrentSkill,
+		LastSkillOutput:    meta.LastSkillOutput,
+		BlockReason:        meta.BlockReason,
+		ResumeSkill:        meta.ResumeSkill,
+		ResumePrompt:       meta.ResumePrompt,
+		PreviousSummary:    previousSummary(meta),
 		IdleTimeoutSeconds: meta.IdleTimeoutSeconds,
 		MaxRestarts:        meta.MaxRestarts,
 		RestartCount:       meta.RestartCount,
@@ -380,6 +432,14 @@ func formatSessionDetail(meta *session.Metadata) string {
 			return fmt.Sprintf("iter: %d/%d", meta.CurrentIteration, meta.MaxIterations)
 		}
 		return "last_output: " + meta.LastOutputAt.Local().Format(time.DateTime)
+	case session.StatusBlocked:
+		if meta.BlockReason != "" {
+			return "awaiting input: " + meta.BlockReason
+		}
+		if meta.ResumeSkill != "" {
+			return "awaiting input for " + meta.ResumeSkill
+		}
+		return "awaiting human input"
 	case session.StatusFailed, session.StatusStopped:
 		if meta.LastError != "" {
 			return meta.LastError
@@ -435,6 +495,32 @@ func readLogFile(readFile func(path string) ([]byte, error), path string, tail i
 		content = tailLines(content, tail)
 	}
 	return content, nil
+}
+
+func previousSummary(meta *session.Metadata) string {
+	if strings.TrimSpace(meta.LastSkillOutput) != "" {
+		return strings.TrimSpace(meta.LastSkillOutput)
+	}
+	return extractPreviousSummary(meta.ResumePrompt)
+}
+
+func extractPreviousSummary(prompt string) string {
+	trimmed := strings.TrimSpace(prompt)
+	if trimmed == "" {
+		return ""
+	}
+
+	const marker = "Previous skill stdout:\n"
+	idx := strings.Index(trimmed, marker)
+	if idx == -1 {
+		return trimmed
+	}
+
+	summary := strings.TrimSpace(trimmed[idx+len(marker):])
+	if summary == "" {
+		return trimmed
+	}
+	return summary
 }
 
 func tailLines(s string, n int) string {

@@ -227,6 +227,54 @@ skills:
 	}
 }
 
+func TestLoadRejectsRouteWithDoneAndBlocked(t *testing.T) {
+	_, err := Load(writeConfig(t, `default_entrypoint: impl
+skills:
+  impl:
+    next:
+      - id: bad
+        done: true
+        blocked: true
+`))
+	if err == nil {
+		t.Error("Load() should return error when route sets both done and blocked")
+	}
+}
+
+func TestLoadRejectsBlockedRouteWithoutSkill(t *testing.T) {
+	_, err := Load(writeConfig(t, `default_entrypoint: impl
+skills:
+  impl:
+    next:
+      - id: need-human
+        blocked: true
+`))
+	if err == nil {
+		t.Error("Load() should return error when blocked route has no skill")
+	}
+}
+
+func TestLoadAllowsBlockedRouteWithSkill(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `default_entrypoint: impl
+skills:
+  impl:
+    next:
+      - id: need-human
+        blocked: true
+        skill: confirm
+  confirm:
+    next:
+      - id: done
+        done: true
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !cfg.Skills["impl"].Next[0].Blocked {
+		t.Fatal("expected blocked route to be preserved")
+	}
+}
+
 func TestLoadRequiresRouterForMultiRouteSkills(t *testing.T) {
 	_, err := Load(writeConfig(t, `default_entrypoint: impl
 skills:

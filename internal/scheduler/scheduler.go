@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,12 +18,19 @@ import (
 )
 
 type progressObserver struct {
-	onIteration func(iteration int, maxIterations int, skill string)
+	onIteration     func(iteration int, maxIterations int, skill string)
+	onSkillComplete func(iteration int, maxIterations int, skill string, stdout string)
 }
 
 func (p *progressObserver) IterationStarted(iteration int, maxIterations int, skill string) {
 	if p.onIteration != nil {
 		p.onIteration(iteration, maxIterations, skill)
+	}
+}
+
+func (p *progressObserver) SkillCompleted(iteration int, maxIterations int, skill string, stdout string) {
+	if p.onSkillComplete != nil {
+		p.onSkillComplete(iteration, maxIterations, skill, stdout)
 	}
 }
 
@@ -65,6 +73,9 @@ func Run(repoRoot string, sessionID string, cfg *config.Config, maxIterations in
 			meta.CurrentIteration = 0
 			meta.MaxIterations = maxIterations
 			meta.CurrentSkill = ""
+			meta.BlockReason = ""
+			meta.ResumeSkill = ""
+			meta.ResumePrompt = ""
 			meta.LastError = lastErr
 			meta.EndedAt = nil
 		})
@@ -79,6 +90,16 @@ func Run(repoRoot string, sessionID string, cfg *config.Config, maxIterations in
 	running := false
 
 	_, err = c.AddFunc(cfg.Schedule, func() {
+		meta, loadErr := session.LoadByID(repoRoot, sessionID)
+		if loadErr != nil {
+			fmt.Fprintf(os.Stderr, "scheduled run skipped: failed to load session metadata: %v\n", loadErr)
+			return
+		}
+		if meta.Status == session.StatusBlocked {
+			fmt.Fprintln(os.Stderr, "scheduled run skipped: session is blocked awaiting human input")
+			return
+		}
+
 		runMu.Lock()
 		if running {
 			runMu.Unlock()
@@ -100,6 +121,9 @@ func Run(repoRoot string, sessionID string, cfg *config.Config, maxIterations in
 			meta.CurrentIteration = 0
 			meta.MaxIterations = maxIterations
 			meta.CurrentSkill = ""
+			meta.BlockReason = ""
+			meta.ResumeSkill = ""
+			meta.ResumePrompt = ""
 			meta.LastError = ""
 			meta.EndedAt = nil
 		}); err != nil {
@@ -117,9 +141,36 @@ func Run(repoRoot string, sessionID string, cfg *config.Config, maxIterations in
 					fmt.Fprintf(os.Stderr, "failed to persist session progress: %v\n", err)
 				}
 			},
+			onSkillComplete: func(iteration int, maxIters int, skill string, stdout string) {
+				if err := updateMeta(func(meta *session.Metadata) {
+					meta.Status = session.StatusRunning
+					meta.CurrentIteration = iteration
+					meta.MaxIterations = maxIters
+					meta.CurrentSkill = skill
+					meta.LastSkillOutput = stdout
+				}); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to persist session output: %v\n", err)
+				}
+			},
 		}
 
 		runErr := orchestrator.RunObserved(cfg, maxIterations, prompt, entrypoint, observer)
+		var blocked *orchestrator.BlockedError
+		if errors.As(runErr, &blocked) {
+			now := time.Now().UTC()
+			if err := updateMeta(func(meta *session.Metadata) {
+				meta.Status = session.StatusBlocked
+				meta.NextRun = nil
+				meta.BlockReason = blocked.Reason
+				meta.ResumeSkill = blocked.Skill
+				meta.ResumePrompt = blocked.Prompt
+				meta.LastError = ""
+				meta.EndedAt = &now
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to persist blocked session state: %v\n", err)
+			}
+			return
+		}
 		if runErr != nil {
 			fmt.Fprintf(os.Stderr, "scheduled run failed: %v\n", runErr)
 			if err := updateScheduled(runErr.Error()); err != nil {
