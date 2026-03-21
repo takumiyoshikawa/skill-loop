@@ -21,6 +21,8 @@ Examples:
 Smallest version:
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
+
 name: scheduled-task
 schedule: "0 9 * * 1-5"
 default_entrypoint: run-task
@@ -36,6 +38,8 @@ skills:
 Notification variant:
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
+
 name: scheduled-task
 schedule: "0 9 * * 1-5"
 default_entrypoint: run-task

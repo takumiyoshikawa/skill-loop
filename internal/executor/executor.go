@@ -171,6 +171,13 @@ func buildCommand(agent string, model string, extraArgs []string, prompt string)
 		}
 		args = append(args, extraArgs...)
 		return "codex", args, nil
+	case "cursor-cli":
+		args := []string{"-p", prompt}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		args = append(args, extraArgs...)
+		return "agent", args, nil
 	case "opencode":
 		args := []string{"run", prompt}
 		if model != "" {

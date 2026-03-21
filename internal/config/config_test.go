@@ -376,6 +376,35 @@ skills:
 	}
 }
 
+func TestLoadAllowsCursorCLIAgent(t *testing.T) {
+	cfg, err := Load(writeConfig(t, `default_entrypoint: impl
+router:
+  runtime: cursor-cli
+  model: gpt-5
+skills:
+  impl:
+    agent:
+      runtime: cursor-cli
+      model: gpt-5
+    next:
+      - id: continue
+        criteria: "keep working"
+        skill: impl
+      - id: finish
+        criteria: "done"
+        done: true
+`))
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Router.Runtime != "cursor-cli" {
+		t.Fatalf("Router.Runtime = %q, want %q", cfg.Router.Runtime, "cursor-cli")
+	}
+	if cfg.Skills["impl"].Agent.Runtime != "cursor-cli" {
+		t.Fatalf("Skills[impl].Agent.Runtime = %q, want %q", cfg.Skills["impl"].Agent.Runtime, "cursor-cli")
+	}
+}
+
 func TestLoadInvalidRouterAgent(t *testing.T) {
 	_, err := Load(writeConfig(t, `default_entrypoint: impl
 router:

@@ -10,7 +10,7 @@ import (
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skill-loop",
-		Short: "An agentic skill orchestrator powered by Claude Code",
+		Short: "An agentic skill orchestrator for coding-agent CLIs",
 		Long: `skill-loop orchestrates multiple AI skills in a loop,
 where each skill can delegate to the next based on its output.`,
 		SilenceUsage:  true,

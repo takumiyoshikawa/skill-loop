@@ -7,7 +7,7 @@
       "properties": {
         "runtime": {
           "type": "string",
-          "description": "Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude."
+          "description": "Coding agent CLI runtime to execute. Supported values are claude or codex or cursor-cli or opencode. Defaults to claude."
         },
         "model": {
           "type": "string",

@@ -21,7 +21,7 @@ type Route struct {
 }
 
 type Agent struct {
-	Runtime string   `yaml:"runtime,omitempty" jsonschema:"description=Coding agent CLI runtime to execute. Supported values are claude or codex or opencode. Defaults to claude." default:"claude"`
+	Runtime string   `yaml:"runtime,omitempty" jsonschema:"description=Coding agent CLI runtime to execute. Supported values are claude or codex or cursor-cli or opencode. Defaults to claude." default:"claude"`
 	Model   string   `yaml:"model,omitempty" jsonschema:"description=Model ID to use for this skill (agent-specific)."`
 	Args    []string `yaml:"args,omitempty" jsonschema:"description=Additional CLI arguments to pass to the agent (e.g. --dangerously-skip-permissions for claude)."`
 }
@@ -212,8 +212,8 @@ func validateAgent(label string, agent Agent) error {
 	if runtime == "" {
 		runtime = "claude"
 	}
-	if runtime != "claude" && runtime != "codex" && runtime != "opencode" {
-		return fmt.Errorf("%s: unsupported agent runtime %q (supported: claude, codex, opencode)", label, agent.Runtime)
+	if runtime != "claude" && runtime != "codex" && runtime != "cursor-cli" && runtime != "opencode" {
+		return fmt.Errorf("%s: unsupported agent runtime %q (supported: claude, codex, cursor-cli, opencode)", label, agent.Runtime)
 	}
 	return nil
 }

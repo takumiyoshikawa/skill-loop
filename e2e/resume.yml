@@ -4,18 +4,22 @@ name: e2e-resume
 default_entrypoint: pass-through
 max_iterations: 2
 router:
-  runtime: codex
-  model: gpt-5.4
+  runtime: cursor-cli
+  model: auto
   args:
-    - "--full-auto"
+    - "--yolo"
+    - "--output-format"
+    - "text"
 
 skills:
   pass-through:
     agent:
-      runtime: claude
-      model: claude-sonnet-4-6
+      runtime: cursor-cli
+      model: auto
       args:
-        - "--dangerously-skip-permissions"
+        - "--yolo"
+        - "--output-format"
+        - "text"
     next:
       - id: approve
         criteria: "If the skill output contains <APPROVED>, finish the workflow."

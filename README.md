@@ -17,7 +17,7 @@ Chain multiple coding-agent skills together in a loop-based workflow. Define ski
 ```
 
 1. skill-loop reads a YAML config that defines skills and routing rules
-2. Starting from `--entrypoint` (if provided) or `default_entrypoint`, it invokes the configured agent (`claude`, `codex`, or `opencode`) with each skill
+2. Starting from `--entrypoint` (if provided) or `default_entrypoint`, it invokes the configured agent (`claude`, `codex`, `cursor-cli`, or `opencode`) with each skill
 3. Each skill produces stdout; a separate router agent evaluates that stdout against the configured route `criteria`
 4. The loop continues until the selected route has `done: true` or `max_iterations` is reached
 
@@ -41,6 +41,7 @@ Requires at least one supported agent CLI to be available on your PATH:
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
 - [Codex CLI](https://github.com/openai/codex) (`codex`)
+- [Cursor CLI](https://cursor.com/docs/cli/overview) (`cursor-cli`, CLI binary: `agent`)
 - [OpenCode CLI](https://github.com/sst/opencode) (`opencode`)
 
 And `tmux` must be installed (skill execution is tmux-backed).
@@ -114,13 +115,21 @@ skills:
       args:
         - "--full-auto"
     next:
+      - id: send-synth
+        skill: synth
+
+  synth:
+    agent:
+      runtime: cursor-cli
+      model: gpt-5
+    next:
       - id: approve
         criteria: "If the review says implementation quality is sufficient."
         done: true
       - id: ask-human
         criteria: "If the review needs a human decision before implementation can continue."
         blocked: true
-        skill: 1-impl
+        skill: synth
       - id: rework
         criteria: "If review found issues that require more implementation work."
         skill: 1-impl
@@ -235,7 +244,7 @@ Each skill runs freely and writes normal stdout. skill-loop sends that stdout to
 
 | Field     | Type   | Required | Description                                                                              |
 | --------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
-| `runtime` | string | No       | Agent CLI to execute (`claude`, `codex`, `opencode`). Defaults to `claude`               |
+| `runtime` | string | No       | Agent CLI to execute (`claude`, `codex`, `cursor-cli`, `opencode`). Defaults to `claude` |
 | `model`   | string | No       | Model to use for the selected agent (for example `claude-sonnet-4.6`)                     |
 | `args`    | list   | No       | Additional CLI arguments passed to the agent (e.g. `["--dangerously-skip-permissions"]`) |
 
