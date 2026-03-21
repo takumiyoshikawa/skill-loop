@@ -160,6 +160,21 @@ func TestBuildCommand(t *testing.T) {
 			wantArgs:   []string{"exec", "prompt", "--model", "gpt-5", "--full-auto"},
 		},
 		{
+			name:       "cursor-cli",
+			agent:      "cursor-cli",
+			model:      "gpt-5",
+			wantBinary: "agent",
+			wantArgs:   []string{"-p", "prompt", "--model", "gpt-5"},
+		},
+		{
+			name:       "cursor-cli with extra args",
+			agent:      "cursor-cli",
+			model:      "gpt-5",
+			extraArgs:  []string{"--sandbox", "disabled"},
+			wantBinary: "agent",
+			wantArgs:   []string{"-p", "prompt", "--model", "gpt-5", "--sandbox", "disabled"},
+		},
+		{
 			name:       "opencode",
 			agent:      "opencode",
 			model:      "x",
