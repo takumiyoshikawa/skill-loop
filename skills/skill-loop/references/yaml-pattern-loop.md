@@ -17,6 +17,8 @@ Examples:
 ## Starter shape
 
 ```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
+
 name: plain-loop
 default_entrypoint: implement
 max_iterations: 10
