@@ -30,3 +30,7 @@ Use this skill for two cases:
 - select the right workflow pattern before drafting YAML
 - create starter skills only when the selected pattern actually needs them
 - explain the execution flow in terms of the chosen pattern
+
+## Validate
+- YAML: validate one or more skill-loop YAML files against `schema.json`
+- schema:https://raw.githubusercontent.com/takumiyoshikawa/skill-loop/refs/heads/main/schema.json
